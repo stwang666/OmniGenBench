@@ -273,7 +273,8 @@ inference_model = ModelHub.load("/home/sw1136/OmniGenBench/examples/dingling_te/
 
 # Get some test samples
 # sample_sequences = datasets['test'].sample(1000).examples
-sample_sequences = datasets['valid'].sample(1000).examples
+#sample_sequences = datasets['valid'].sample(1000).examples
+sample_sequences = datasets['train'].sample(1).examples
 
 label_names = ['Low', 'Medium', 'High']
 tissue_names = [
@@ -303,7 +304,7 @@ with torch.no_grad():
             probs = probabilities[i]
 
             # Get ground truth if available
-            gt_col = f"{tissue.replace('-', '_')}_TE_label"
+            gt_col = f"{tissue}_TE_label"
             if gt_col in row:
                 gt_label = row[gt_col]
                 if isinstance(gt_label, float) and math.isnan(gt_label):
