@@ -189,10 +189,11 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
 
         return outputs
 
+
 # Load datasets
 print("📊 Loading datasets...")
 datasets = TriClassTEDataset.from_hub(
-    dataset_name_or_path="examples/dingling_te/",  # 指定具体的数据目录
+    "examples/dingling_te/",  # 指定具体的数据目录
     tokenizer=tokenizer,
     max_length=512,
     force_padding=False
@@ -203,68 +204,68 @@ print(f"📊 Loaded datasets: {list(datasets.keys())}")
 for split, dataset in datasets.items():
     print(f"  - {split}: {len(dataset)} samples")
 
-# # Initialize model
-# print("\n🚀 Initializing model...")
-# model = OmniModelForTriClassTESequenceClassification(
-#     model_name_or_path,
-#     tokenizer,
-#     num_labels=9,  # 9 tissues
-#     num_classes=3,  # 3 classes: Low, Medium, High
-#     trust_remote_code=True
-# )
+# Initialize model
+print("\n🚀 Initializing model...")
+model = OmniModelForTriClassTESequenceClassification(
+    model_name_or_path,
+    tokenizer,
+    num_labels=9,  # 9 tissues
+    num_classes=3,  # 3 classes: Low, Medium, High
+    trust_remote_code=True
+)
 
-# # Define metrics: accuracy and F1 score
-# # - accuracy_score: 计算整体分类准确率，忽略标签为-100的样本（通常用于padding或无效标签）
-# # - f1_score: 计算F1分数（精确率和召回率的调和平均），使用macro平均（对每个类别计算F1后取平均，适合类别不平衡的情况）
-# # 
-# # 计算时机：这些metrics会在训练过程中应用于eval_dataset（验证集）和test_dataset（测试集）
-# # 计算方式：
-# #   1. 模型对验证集/测试集进行前向传播，得到预测结果（logits）
-# #   2. 将logits转换为预测类别（argmax）
-# #   3. 将预测类别与真实标签进行比较，忽略标签为-100的位置
-# #   4. accuracy_score: 正确预测数 / 有效样本总数
-# #   5. f1_score (macro): 对每个类别分别计算F1值，然后取平均值
-# metric_functions = [
-#     ClassificationMetric(ignore_y=-100).accuracy_score,  # 准确率：正确预测的样本数 / 总样本数
-#     ClassificationMetric(ignore_y=-100, average='macro').f1_score,  # 宏平均F1：(TP) / (TP + 0.5*(FP+FN))，对所有类别取平均
-# ]
+# Define metrics: accuracy and F1 score
+# - accuracy_score: 计算整体分类准确率，忽略标签为-100的样本（通常用于padding或无效标签）
+# - f1_score: 计算F1分数（精确率和召回率的调和平均），使用macro平均（对每个类别计算F1后取平均，适合类别不平衡的情况）
+# 
+# 计算时机：这些metrics会在训练过程中应用于eval_dataset（验证集）和test_dataset（测试集）
+# 计算方式：
+#   1. 模型对验证集/测试集进行前向传播，得到预测结果（logits）
+#   2. 将logits转换为预测类别（argmax）
+#   3. 将预测类别与真实标签进行比较，忽略标签为-100的位置
+#   4. accuracy_score: 正确预测数 / 有效样本总数
+#   5. f1_score (macro): 对每个类别分别计算F1值，然后取平均值
+metric_functions = [
+    ClassificationMetric(ignore_y=-100).accuracy_score,  # 准确率：正确预测的样本数 / 总样本数
+    ClassificationMetric(ignore_y=-100, average='macro').f1_score,  # 宏平均F1：(TP) / (TP + 0.5*(FP+FN))，对所有类别取平均
+]
 
-# # Initialize trainer
-#  # batch_size: 每次从数据集中加载并处理的样本数量
-#     # - 这里设置为16，表示每个训练步骤会处理16个序列样本
-#     # - 较小的batch_size可以减少GPU内存占用，但训练可能不够稳定
-#     # - 较大的batch_size可以提高训练稳定性和速度，但需要更多GPU内存
+# Initialize trainer
+ # batch_size: 每次从数据集中加载并处理的样本数量
+    # - 这里设置为16，表示每个训练步骤会处理16个序列样本
+    # - 较小的batch_size可以减少GPU内存占用，但训练可能不够稳定
+    # - 较大的batch_size可以提高训练稳定性和速度，但需要更多GPU内存
 
-# # gradient_accumulation_steps: 梯度累积步数
-#     # - 这里设置为4，表示每4个batch才进行一次参数更新
-#     # - 实际有效batch_size = batch_size × gradient_accumulation_steps = 16 × 4 = 64
-#     # - 作用：在GPU内存有限的情况下，通过累积多个小batch的梯度来模拟大batch训练
-#     # - 工作原理：
-#     #   1. 前向传播和反向传播计算梯度（但不更新参数）
-#     #   2. 将梯度累加到之前的梯度上
-#     #   3. 重复步骤1-2共4次
-#     #   4. 第4次后，使用累积的梯度更新模型参数，然后清零梯度
-#     # - 优点：可以用较小的GPU内存训练出与大batch相当的效果
+# gradient_accumulation_steps: 梯度累积步数
+    # - 这里设置为4，表示每4个batch才进行一次参数更新
+    # - 实际有效batch_size = batch_size × gradient_accumulation_steps = 16 × 4 = 64
+    # - 作用：在GPU内存有限的情况下，通过累积多个小batch的梯度来模拟大batch训练
+    # - 工作原理：
+    #   1. 前向传播和反向传播计算梯度（但不更新参数）
+    #   2. 将梯度累加到之前的梯度上
+    #   3. 重复步骤1-2共4次
+    #   4. 第4次后，使用累积的梯度更新模型参数，然后清零梯度
+    # - 优点：可以用较小的GPU内存训练出与大batch相当的效果
     
-# # 训练时不会用到test_dataset，它仅在训练完成后用于最终评估
-# # - train_dataset: 用于模型训练，更新模型参数
-# # - eval_dataset: 用于训练过程中的验证，监控过拟合，选择最佳模型
-# # - test_dataset: 仅在训练完成后用于最终性能评估，不参与训练过程
+# 训练时不会用到test_dataset，它仅在训练完成后用于最终评估
+# - train_dataset: 用于模型训练，更新模型参数
+# - eval_dataset: 用于训练过程中的验证，监控过拟合，选择最佳模型
+# - test_dataset: 仅在训练完成后用于最终性能评估，不参与训练过程
 
-# trainer = AccelerateTrainer(
-#     model=model,
-#     epochs=50,
-#     learning_rate=2e-5,
-#     batch_size=16,  # 每次训练的样本数量
-#     train_dataset=datasets["train"],
-#     eval_dataset=datasets["valid"],
-#     test_dataset=datasets["test"],  # 仅用于训练后的最终测试，不影响训练过程
-#     compute_metrics=metric_functions,
-#     gradient_accumulation_steps=4,
-# )
-# # trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
-# metrics = trainer.train(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
-# print('📊 Final Metrics:', metrics)
+trainer = AccelerateTrainer(
+    model=model,
+    epochs=10,
+    learning_rate=2e-5,
+    batch_size=16,  # 每次训练的样本数量
+    train_dataset=datasets["train"],
+    eval_dataset=datasets["valid"],
+    test_dataset=datasets["test"],  # 仅用于训练后的最终测试，不影响训练过程
+    compute_metrics=metric_functions,
+    gradient_accumulation_steps=4,
+)
+# trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
+print('📊 Final Metrics:', metrics)
 
 # === Model Inference ===
 print("\n🔮 Starting inference on test samples...")
@@ -274,7 +275,7 @@ inference_model = ModelHub.load("/home/sw1136/OmniGenBench/examples/dingling_te/
 # Get some test samples
 # sample_sequences = datasets['test'].sample(1000).examples
 #sample_sequences = datasets['valid'].sample(1000).examples
-sample_sequences = datasets['train'].sample(1).examples
+sample_sequences = datasets['train'].examples[:1]
 
 label_names = ['Low', 'Medium', 'High']
 tissue_names = [

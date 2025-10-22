@@ -206,161 +206,396 @@ def get_all_predictions(model, sequence):
 
 # ==================== 定点突变分析 ====================
 
-def in_silico_mutagenesis(model, sequence, tissue_idx=0, target_class=2):
-    """对序列进行定点突变，并计算每个突变对模型预测概率的影响"""
-    print(f"\n🔬 正在对序列进行计算机内定点突变分析...")
-    print(f"📊 分析组织: {tissue_names[tissue_idx]}")
-    print(f"🎯 目标类别: {label_names[target_class]}")
+def in_silico_mutagenesis(model, sequence, tissue_idx=0, target_class=2, normalize='none'):
+    """
+    对序列进行定点突变，并计算每个突变对模型预测概率的影响
+    Perform in-silico mutagenesis on the sequence and calculate mutation impact
+    
+    参数 / Parameters:
+        normalize: 归一化方法 / Normalization method
+            - 'none': 不归一化，绝对概率变化 / No normalization (absolute probability change)
+            - 'relative': 相对归一化，相对于基准概率的百分比 / Relative to baseline (%)
+            - 'minmax': Min-Max归一化到[0, 1] / Min-Max normalization to [0, 1]
+            - 'zscore': Z-score标准化 / Z-score standardization
+    
+    返回:
+        importance_scores: 重要性得分矩阵 [4, seq_len]
+        baseline_score: 基准概率
+        predicted_classes: 每个位置突变后的预测类别 [4, seq_len]
+    """
+    print(f"\n🔬 Performing in-silico mutagenesis analysis...")
+    print(f"📊 Tissue: {tissue_names[tissue_idx]}")
+    print(f"🎯 Target class: {label_names[target_class]}")
+    print(f"📏 Normalization: {normalize}")
     
     NUCLEOTIDES = ['A', 'T', 'C', 'G']
     seq_len = len(sequence)
     importance_scores = np.zeros((len(NUCLEOTIDES), seq_len))
+    predicted_classes = np.zeros((len(NUCLEOTIDES), seq_len), dtype=int)
     
     baseline_score = get_prediction_prob(model, sequence, tissue_idx, target_class)
-    print(f"📈 基准序列预测为'{label_names[target_class]}'的概率: {baseline_score:.4f}")
+    print(f"📈 Baseline probability for '{label_names[target_class]}': {baseline_score:.4f}")
     
+    # 计算所有位置的重要性得分和预测类别
     for i in range(seq_len):
         original_nucleotide = sequence[i].upper()
         
         for j, mutated_nucleotide in enumerate(NUCLEOTIDES):
             if original_nucleotide == mutated_nucleotide:
                 importance_scores[j, i] = 0
+                # 对于原始碱基，使用基准预测类别
+                with torch.no_grad():
+                    outputs = model.inference(sequence)
+                    predicted_classes[j, i] = outputs['predictions'][tissue_idx].cpu().item()
                 continue
             
             mutated_sequence = list(sequence)
             mutated_sequence[i] = mutated_nucleotide
             mutated_sequence = "".join(mutated_sequence)
             
-            mutated_score = get_prediction_prob(model, mutated_sequence, tissue_idx, target_class)
+            with torch.no_grad():
+                outputs = model.inference(mutated_sequence)
+                mutated_score = outputs['probabilities'][tissue_idx, target_class].cpu().item() # 取得是target_class的概率，target_class是2，所以是High的概率；但low 和medium的概率变化这里没有计算
+                predicted_class = outputs['predictions'][tissue_idx].cpu().item()
+            
             score_change = baseline_score - mutated_score
             importance_scores[j, i] = score_change
+            predicted_classes[j, i] = predicted_class
         
         if (i + 1) % 50 == 0 or i == seq_len - 1:
-            print(f"⏳ 进度: {i + 1}/{seq_len} 个位置 ({(i+1)/seq_len*100:.1f}%)")
+            print(f"⏳ Progress: {i + 1}/{seq_len} positions ({(i+1)/seq_len*100:.1f}%)")
     
-    print("✅ 定点突变分析完成！")
-    return importance_scores, baseline_score
+    # 应用归一化
+    original_scores = importance_scores.copy()  # 保存原始分数用于报告
+    
+    if normalize == 'relative':
+        # 相对于基准概率的变化百分比
+        if baseline_score > 1e-6:
+            importance_scores = importance_scores / baseline_score
+            print(f"✅ Applied relative normalization (divided by baseline {baseline_score:.4f})")
+            print(f"   相对重要性：现在的值表示相对于基准概率的变化比例")
+        else:
+            print(f"⚠️  Baseline probability too low, skipping relative normalization")
+    
+    elif normalize == 'minmax':
+        # Min-Max归一化到[0, 1]
+        min_val = importance_scores.min()
+        max_val = importance_scores.max()
+        if max_val > min_val + 1e-6:
+            importance_scores = (importance_scores - min_val) / (max_val - min_val)
+            print(f"✅ Applied Min-Max normalization")
+            print(f"   原始范围: [{min_val:.4f}, {max_val:.4f}] → [0, 1]")
+        else:
+            print(f"⚠️  All values similar, skipping Min-Max normalization")
+    
+    elif normalize == 'zscore':
+        # Z-score标准化
+        mean_val = importance_scores.mean()
+        std_val = importance_scores.std()
+        if std_val > 1e-6:
+            importance_scores = (importance_scores - mean_val) / std_val
+            print(f"✅ Applied Z-score standardization")
+            print(f"   均值: {mean_val:.4f}, 标准差: {std_val:.4f}")
+        else:
+            print(f"⚠️  Standard deviation too low, skipping Z-score normalization")
+    
+    elif normalize == 'none':
+        print(f"✅ Using raw importance scores (absolute probability change)")
+        print(f"   原始分数范围: [{importance_scores.min():.4f}, {importance_scores.max():.4f}]")
+    
+    else:
+        print(f"⚠️  Unknown normalization method: {normalize}, using raw scores")
+    
+    print("✅ In-silico mutagenesis completed!")
+    return importance_scores, baseline_score, predicted_classes
 
 
 # ==================== 可视化 ====================
 
 def visualize_importance(importance_scores, baseline_score, sequence, 
-                        tissue_name, target_class_name, save_path=None):
-    """可视化重要性得分热力图"""
-    print("\n🎨 正在生成重要性热力图...")
+                        tissue_name, target_class_name, predicted_classes=None, save_path=None):
+    """Visualize importance score heatmap with predicted class changes"""
+    print("\n🎨 Generating importance heatmap...")
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(20, 8))
+    # 创建3个子图
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(20, 15))
     
-    # 热力图
+    # 子图1: 重要性热力图
     sns.heatmap(
         importance_scores,
         cmap="RdBu_r",
         center=0,
         yticklabels=['A', 'T', 'C', 'G'],
         cbar_kws={'label': 'Score Change (Importance)'},
-        ax=ax1
+        ax=ax1,
+        xticklabels=False
     )
-    ax1.set_title(f"In-Silico Mutagenesis Saliency Map\n组织: {tissue_name} | 目标类别: {target_class_name} | 基准概率: {baseline_score:.4f}")
-    ax1.set_xlabel("序列位置")
-    ax1.set_ylabel("突变为")
+    ax1.set_title(f"In-Silico Mutagenesis Saliency Map\nTissue: {tissue_name} | Target Class: {target_class_name} | Baseline Probability: {baseline_score:.4f}")
+    ax1.set_ylabel("Mutated To")
     
-    # 柱状图
+    # 在热力图下方添加序列
+    seq_len = len(sequence)
+    
+    # 添加位置编号（每隔5个位置显示）
+    for i in range(seq_len):
+        if i % 5 == 0:
+            ax1.text(i + 0.5, len(['A', 'T', 'C', 'G']) + 0.3, 
+                    str(i), 
+                    ha='center', va='top', fontsize=6, 
+                    color='black', alpha=0.7)
+    
+    # 添加序列（在位置编号下方）
+    for i, nucleotide in enumerate(sequence):
+        # Color code nucleotides
+        if nucleotide.upper() == 'A':
+            color = '#FF6B6B'
+        elif nucleotide.upper() == 'T':
+            color = '#4ECDC4'
+        elif nucleotide.upper() == 'C':
+            color = '#45B7D1'
+        elif nucleotide.upper() == 'G':
+            color = '#95E1D3'
+        else:
+            color = 'gray'
+        
+        ax1.text(i + 0.5, len(['A', 'T', 'C', 'G']) + 0.6, 
+                nucleotide.upper(), 
+                ha='center', va='top', fontsize=8, 
+                color=color, weight='bold')
+    
+    # 在序列下方添加xlabel
+    ax1.text(seq_len / 2, len(['A', 'T', 'C', 'G']) + 1.0, 
+            "Sequence Position", 
+            ha='center', va='top', fontsize=10, 
+            color='black', weight='bold')
+    
+    # 子图2: 最大重要性得分柱状图
     max_importance = np.max(importance_scores, axis=0)
     positions = np.arange(len(sequence))
     
     ax2.bar(positions, max_importance, color='steelblue', alpha=0.7)
-    ax2.set_xlabel("序列位置")
-    ax2.set_ylabel("最大重要性得分")
-    ax2.set_title("每个位置的最大重要性得分")
+    ax2.set_xlabel("")
+    ax2.set_ylabel("Maximum Importance Score")
+    ax2.set_title("Maximum Importance Score at Each Position")
     ax2.grid(True, alpha=0.3)
     
-    # 标注最重要的位置
+    # Annotate the most important positions
     top_positions = np.argsort(max_importance)[-min(10, len(sequence)):][::-1]
     for pos in top_positions:
         ax2.text(pos, max_importance[pos], f'{sequence[pos]}', 
                 ha='center', va='bottom', fontsize=8, color='red')
     
+    # 在柱状图下方添加序列和位置编号
+    for i in range(seq_len):
+        if i % 5 == 0:
+            ax2.text(i, ax2.get_ylim()[0] - (ax2.get_ylim()[1] - ax2.get_ylim()[0]) * 0.05, 
+                    str(i), 
+                    ha='center', va='top', fontsize=6, 
+                    color='black', alpha=0.7)
+    
+    for i, nucleotide in enumerate(sequence):
+        # Color code nucleotides
+        if nucleotide.upper() == 'A':
+            color = '#FF6B6B'
+        elif nucleotide.upper() == 'T':
+            color = '#4ECDC4'
+        elif nucleotide.upper() == 'C':
+            color = '#45B7D1'
+        elif nucleotide.upper() == 'G':
+            color = '#95E1D3'
+        else:
+            color = 'gray'
+        
+        ax2.text(i, ax2.get_ylim()[0] - (ax2.get_ylim()[1] - ax2.get_ylim()[0]) * 0.10, 
+                nucleotide.upper(), 
+                ha='center', va='top', fontsize=8, 
+                color=color, weight='bold')
+    
+    # 调整y轴范围以容纳序列和位置编号
+    y_min, y_max = ax2.get_ylim()
+    ax2.set_ylim(y_min - (y_max - y_min) * 0.15, y_max)
+    
+    # 子图3: 突变后预测类别热力图
+    if predicted_classes is not None:
+        # 定义类别颜色映射: Low=0(绿色), Medium=1(黄色), High=2(红色)
+        class_colors = {0: '#2ECC71', 1: '#F39C12', 2: '#E74C3C'}  # Low, Medium, High
+        
+        # 创建自定义colormap
+        from matplotlib.colors import ListedColormap
+        cmap = ListedColormap([class_colors[0], class_colors[1], class_colors[2]])
+        
+        sns.heatmap(
+            predicted_classes,
+            cmap=cmap,
+            yticklabels=['A', 'T', 'C', 'G'],
+            cbar_kws={'label': 'Predicted Class', 'ticks': [0, 1, 2]},
+            ax=ax3,
+            xticklabels=False,
+            vmin=0,
+            vmax=2
+        )
+        
+        # 设置colorbar标签
+        cbar = ax3.collections[0].colorbar
+        cbar.set_ticklabels(['Low', 'Medium', 'High'])
+        
+        ax3.set_title(f"Predicted Class After Mutation\n(Green=Low, Yellow=Medium, Red=High)")
+        ax3.set_ylabel("Mutated To")
+        
+        # 在热力图下方添加序列
+        for i in range(seq_len):
+            if i % 5 == 0:
+                ax3.text(i + 0.5, len(['A', 'T', 'C', 'G']) + 0.3, 
+                        str(i), 
+                        ha='center', va='top', fontsize=6, 
+                        color='black', alpha=0.7)
+        
+        for i, nucleotide in enumerate(sequence):
+            if nucleotide.upper() == 'A':
+                color = '#FF6B6B'
+            elif nucleotide.upper() == 'T':
+                color = '#4ECDC4'
+            elif nucleotide.upper() == 'C':
+                color = '#45B7D1'
+            elif nucleotide.upper() == 'G':
+                color = '#95E1D3'
+            else:
+                color = 'gray'
+            
+            ax3.text(i + 0.5, len(['A', 'T', 'C', 'G']) + 0.6, 
+                    nucleotide.upper(), 
+                    ha='center', va='top', fontsize=8, 
+                    color=color, weight='bold')
+        
+        ax3.text(seq_len / 2, len(['A', 'T', 'C', 'G']) + 1.0, 
+                "Sequence Position", 
+                ha='center', va='top', fontsize=10, 
+                color='black', weight='bold')
+    
     plt.tight_layout()
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"💾 图像已保存到: {save_path}")
+        print(f"💾 Image saved to: {save_path}")
     
     plt.show()
 
 
 # ==================== 综合分析 ====================
 
-def analyze_sequence_comprehensive(model, sequence, tissue_idx=0):
-    """对一个序列在特定组织上进行全面分析"""
+def analyze_sequence_comprehensive(model, sequence, tissue_idx=0, normalize='none'):
+    """
+    对一个序列在特定组织上进行全面分析
+    Perform comprehensive analysis on a sequence for a specific tissue
+    
+    参数:
+        normalize: 归一化方法 ('none', 'relative', 'minmax', 'zscore')
+    """
     tissue_name = tissue_names[tissue_idx]
     print(f"\n{'='*70}")
-    print(f"🔍 开始综合分析")
-    print(f"🧬 序列长度: {len(sequence)} bp")
-    print(f"🏥 分析组织: {tissue_name}")
+    print(f"🔍 Starting comprehensive analysis")
+    print(f"🧬 Sequence length: {len(sequence)} bp")
+    print(f"🏥 Analyzing tissue: {tissue_name}")
     print(f"{'='*70}")
     
-    # 1. 获取预测结果
+    # 1. Get prediction results
     predictions, probabilities = get_all_predictions(model, sequence)
     
-    print(f"\n📊 所有组织的预测结果:")
+    print(f"\n📊 Prediction results for all tissues:")
     for i, (pred, probs) in enumerate(zip(predictions, probabilities)):
         print(f"  {tissue_names[i]:25s}: {label_names[pred]:6s} "
               f"(Low: {probs[0]:.3f}, Medium: {probs[1]:.3f}, High: {probs[2]:.3f})")
     
-    # 2. 突变分析
+    # 2. Mutagenesis analysis
     target_class = predictions[tissue_idx]
-    print(f"\n🎯 将对 {tissue_name} 组织的预测类别 '{label_names[target_class]}' 进行突变分析...")
+    print(f"\n🎯 Performing mutagenesis analysis for {tissue_name} tissue's predicted class '{label_names[target_class]}'...")
     
-    importance_scores, baseline_score = in_silico_mutagenesis(
-        model, sequence, tissue_idx, target_class
+    importance_scores, baseline_score, predicted_classes = in_silico_mutagenesis(
+        model, sequence, tissue_idx, target_class, normalize=normalize
     )
     
-    # 3. 可视化
-    save_path = f"/home/sw1136/OmniGenBench/examples/dingling_te/mutagenesis_{tissue_name}_{label_names[target_class]}.png"
+    # 3. Visualization
+    norm_suffix = f"_{normalize}" if normalize != 'none' else ""
+    save_path = f"/home/sw1136/OmniGenBench/examples/dingling_te/mutagenesis_{tissue_name}_{label_names[target_class]}{norm_suffix}.png"
     visualize_importance(
         importance_scores, baseline_score, sequence,
-        tissue_name, label_names[target_class], save_path
+        tissue_name, label_names[target_class], predicted_classes, save_path
     )
     
-    # 4. 输出关键位置
+    # 4. Output key positions
     max_importance = np.max(importance_scores, axis=0)
     top_positions = np.argsort(max_importance)[-min(10, len(sequence)):][::-1]
     
-    print(f"\n🔝 最重要的{len(top_positions)}个位置:")
+    print(f"\n🔝 Top {len(top_positions)} most important positions:")
     for rank, pos in enumerate(top_positions, 1):
         nt = sequence[pos]
         score = max_importance[pos]
         best_mut_idx = np.argmax(importance_scores[:, pos])
         best_mut = ['A', 'T', 'C', 'G'][best_mut_idx]
-        print(f"  {rank:2d}. 位置 {pos:4d}: {nt} → {best_mut} (重要性: {score:.4f})")
+        print(f"  {rank:2d}. Position {pos:4d}: {nt} → {best_mut} (Importance: {score:.4f})")
     
-    return importance_scores, baseline_score
+    return importance_scores, baseline_score, predicted_classes
 
 
-# ==================== 主程序 ====================
+
 
 if __name__ == "__main__":
-    # 示例序列（使用较短序列进行演示）
-    # 完整分析500bp序列大约需要10-15分钟
-
-
-    # ==================== 加载模型 ====================
-
-    print("🔄 正在加载训练好的三分类 TE 模型...")
+    
+    print("🔄 Loading trained tri-class TE model...")
 
     model_path = "/home/sw1136/OmniGenBench/examples/dingling_te/ogb_te_3class_finetuned_epoch_19_seed_42_accuracy_score_0.9900_seed_42_f1_score_0.9900"
 
     inference_model = ModelHub.load(model_path)
 
-
-    example_sequence = "GAGGGAGGGAAACGGGGGAGGGGAATGGGATGCTCCATTAGCTAAGCTCTGGTCTGATTACACGCCATTTCAGGAGCCATCGGTGGATCCGCCTCCCCCTCGCCCCTCGCCTACACCCCC"
+    example_sequence = "CTTGCACTCTCCACGCACGTCAGTCCAGCCTCGTCTCGTTTCGTGTCGTCTGCTCGGGACCAGGATAG"
     
-    # 选择要分析的组织
-    tissues_to_analyze = [0]  
+    # Select tissues to analyze
+    tissues_to_analyze = [2]  # 0 = root
     
+    # ==================== 归一化方法选择 ====================
+    # 可选的归一化方法：
+    # - 'none': 不归一化（默认）- 适合单序列分析，关注绝对影响
+    # - 'relative': 相对归一化 - 适合跨序列比较，关注相对影响
+    # - 'minmax': Min-Max归一化 - 适合可视化对比，统一范围到[0,1]
+    # - 'zscore': Z-score标准化 - 适合统计分析，识别显著异常值
+    
+    normalize_method = 'none'  # 👈 修改这里来选择不同的归一化方法
     for tissue_idx in tissues_to_analyze:
-        analyze_sequence_comprehensive(inference_model, example_sequence, tissue_idx)
+        analyze_sequence_comprehensive(
+            inference_model, 
+            example_sequence, 
+            tissue_idx,
+            normalize=normalize_method
+        )
         print("\n" + "="*70 + "\n")
     
-    print("🎉 所有可解释性分析完成！")
+    print("🎉 All explainability analyses completed!")
+    
+    # # ==================== 使用建议 ====================
+    # print("\n" + "="*70)
+    # print("📚 归一化方法使用建议:")
+    # print("="*70)
+    # print("\n1️⃣  不归一化 (normalize='none')")
+    # print("   ✅ 适用场景：单序列深度分析")
+    # print("   ✅ 优点：保留绝对概率变化信息")
+    # print("   ✅ 解释：重要性得分 = 基准概率 - 突变后概率")
+    # print("   📊 例如：0.5 表示突变导致概率下降了50个百分点\n")
+    
+    # print("2️⃣  相对归一化 (normalize='relative')")
+    # print("   ✅ 适用场景：跨序列比较，不同基因间对比")
+    # print("   ✅ 优点：消除基准概率差异的影响")
+    # print("   ✅ 解释：重要性得分 = (基准概率 - 突变后概率) / 基准概率")
+    # print("   📊 例如：0.5 表示突变导致概率下降了50%\n")
+    
+    # print("3️⃣  Min-Max归一化 (normalize='minmax')")
+    # print("   ✅ 适用场景：热力图可视化对比，跨实验比较")
+    # print("   ✅ 优点：统一尺度，便于设定阈值")
+    # print("   ✅ 解释：将所有得分线性缩放到[0, 1]")
+    # print("   📊 1.0表示该位置最重要，0.0表示最不重要\n")
+    
+    # print("4️⃣  Z-score标准化 (normalize='zscore')")
+    # print("   ✅ 适用场景：统计显著性分析，识别异常位点")
+    # print("   ✅ 优点：考虑分布特征，突出显著变化")
+    # print("   ✅ 解释：(得分 - 均值) / 标准差")
+    # print("   📊 |Z| > 2 表示该位置显著重要（超过95%分位）")
+    # print("\n" + "="*70)
