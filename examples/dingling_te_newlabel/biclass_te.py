@@ -13,7 +13,7 @@ import math
 
 from omnigenbench import (
     ClassificationMetric,
-    AccelerateTrainer,
+    Trainer,
     ModelHub,
     OmniTokenizer,
     OmniDatasetForMultiLabelClassification,
@@ -43,46 +43,20 @@ class BiClassTEDataset(OmniDatasetForMultiLabelClassification):
         super().__init__(**kwargs)
 
     def prepare_input(self, instance, **kwargs):
-        # Map labels to indices: Low=0, High=1, NA=-100 (ignored in loss)
-        # Handle multiple formats: int, float, string representations
-        def map_label(label_value):
-            # Convert to string first to handle uniformly
-            label_str = str(label_value).lower().strip()
-            
-            # Handle NaN/None/empty cases
-            if label_str in ['nan', 'none', '', 'null']:
-                return -100
-                
-            # Handle numeric values (both int and float)
-            try:
-                numeric_val = float(label_str)
-                if numeric_val == 0.0:
-                    return 0
-                elif numeric_val == 1.0:
-                    return 1
-                else:
-                    return -100  # Unknown numeric value
-            except ValueError:
-                # Handle string labels if any
-                if label_str in ['low', '0']:
-                    return 0
-                elif label_str in ['high', '1']:
-                    return 1
-                else:
-                    return -100  # Unknown string value
+        label2idx = {'0.0': 0, '1.0': 1, 'nan': -100}
 
         # Extract labels for all 9 tissues
-        root_TE_label = map_label(instance["root_TE_label"])
-        seedling_TE_label = map_label(instance["seedling_TE_label"])
-        leaf_TE_label = map_label(instance["leaf_TE_label"])
-        FMI_TE_label = map_label(instance["FMI_TE_label"])
-        FOD_TE_label = map_label(instance["FOD_TE_label"])
-        Prophase_I_pollen_TE_label = map_label(instance["Prophase-I-pollen_TE_label"])
-        Tricellular_pollen_TE_label = map_label(instance["Tricellular-pollen_TE_label"])
-        flag_TE_label = map_label(instance["flag_TE_label"])
-        grain_TE_label = map_label(instance["grain_TE_label"])
+        root_TE_label = label2idx[str(instance["root_TE_label"])]
+        seedling_TE_label = label2idx[str(instance["seedling_TE_label"])]
+        leaf_TE_label = label2idx[str(instance["leaf_TE_label"])]
+        FMI_TE_label = label2idx[str(instance["FMI_TE_label"])]
+        FOD_TE_label = label2idx[str(instance["FOD_TE_label"])]
+        Prophase_I_pollen_TE_label = label2idx[str(instance["Prophase-I-pollen_TE_label"])]
+        Tricellular_pollen_TE_label = label2idx[str(instance["Tricellular-pollen_TE_label"])]
+        flag_TE_label = label2idx[str(instance["flag_TE_label"])]
+        grain_TE_label = label2idx[str(instance["grain_TE_label"])]
         sequence = instance["sequence"]
-
+        
         # Tokenize sequence
         tokenized_inputs = self.tokenizer(
             sequence,
@@ -105,12 +79,13 @@ class BiClassTEDataset(OmniDatasetForMultiLabelClassification):
             grain_TE_label,
         ], dtype=torch.long)  # Use long for CrossEntropyLoss
 
+
         tokenized_inputs["labels"] = labels
 
         return tokenized_inputs
 
 
-class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenceClassification):
+class OmniModelForBiClassTESequenceClassification(OmniModelForMultiLabelSequenceClassification):
     """Model for 3-class multi-label TE classification"""
 
     def __init__(self, config_or_model, tokenizer, num_labels=9, num_classes=2, *args, **kwargs):
@@ -218,7 +193,9 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
 # Load datasets
 print("📊 Loading datasets...")
 datasets = BiClassTEDataset.from_hub(
-    "examples/dingling_te_newlabel",  # 指定具体的数据目录
+    # "examples/dingling_te_newlabel",  # 指定具体的数据目录
+    #"examples/dingling_te_newlabel/preprocess_data_Tmean_04/split_ab_train_d",  # 使用A+B训练，D划分的数据
+    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_04/split_a", #仅使用A划分的数据
     tokenizer=tokenizer,
     max_length=512,
     force_padding=False
@@ -231,7 +208,7 @@ for split, dataset in datasets.items():
 
 # Initialize model
 print("\n🚀 Initializing model...")
-model = OmniModelForTriClassTESequenceClassification(
+model = OmniModelForBiClassTESequenceClassification(
     model_name_or_path,
     tokenizer,
     num_labels=9,  # 9 tissues
@@ -277,19 +254,20 @@ metric_functions = [
 # - eval_dataset: 用于训练过程中的验证，监控过拟合，选择最佳模型
 # - test_dataset: 仅在训练完成后用于最终性能评估，不参与训练过程
 
-trainer = AccelerateTrainer(
+trainer = Trainer(
     model=model,
-    epochs=10,
-    learning_rate=2e-5,
+    epochs=15,  # 增加epochs，因为学习率降低需要更多时间
+    learning_rate=5e-5,  # 🔑🔑 大幅降低学习率！从1e-4→5e-6 (降低20倍)
     batch_size=16,  # 每次训练的样本数量
     train_dataset=datasets["train"],
     eval_dataset=datasets["valid"],
     test_dataset=datasets["test"],  # 仅用于训练后的最终测试，不影响训练过程
     compute_metrics=metric_functions,
-    gradient_accumulation_steps=4,
+   # gradient_accumulation_steps=4,
+    device="cuda:0",
 )
 # trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=BiClassTEDataset)
-metrics = trainer.train(path_to_save="ogb_te_3class_finetuned", dataset_class=BiClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_2class_finetuned_a", dataset_class=BiClassTEDataset)
 print('📊 Final Metrics:', metrics)
 
 # === Model Inference ===

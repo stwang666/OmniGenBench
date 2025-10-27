@@ -1,0 +1,25 @@
+================================================================================
+所有亚基因组合并数据 - 总体统计报告
+================================================================================
+
+总样本数: 92715
+成功处理的亚基因组: A, B, D
+
+A亚基因组:
+  样本数: 35368
+  输出文件: merged_A_tissue_data.csv
+  包含的tissue: 9
+  tissue列表: root, seedling, leaf, FMI, FOD, Prophase-I-pollen, Tricellular-pollen, flag, grain
+
+B亚基因组:
+  样本数: 32306
+  输出文件: merged_B_tissue_data.csv
+  包含的tissue: 9
+  tissue列表: root, seedling, leaf, FMI, FOD, Prophase-I-pollen, Tricellular-pollen, flag, grain
+
+D亚基因组:
+  样本数: 25041
+  输出文件: merged_D_tissue_data.csv
+  包含的tissue: 9
+  tissue列表: root, seedling, leaf, FMI, FOD, Prophase-I-pollen, Tricellular-pollen, flag, grain
+

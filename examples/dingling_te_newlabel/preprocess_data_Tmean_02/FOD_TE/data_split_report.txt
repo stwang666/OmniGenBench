@@ -1,0 +1,24 @@
+FOD_TE数据划分报告
+==================================================
+
+原始数据信息:
+  样本数: 64,243
+  特征数: 15
+  NA值数量: 48,544
+  NA比率: 0.0504 (5.04%)
+
+数据划分结果:
+  训练集: 44,970 样本 (70.0%)
+  验证集: 9,636 样本 (15.0%)
+  测试集: 9,637 样本 (15.0%)
+
+文件保存位置:
+  训练集: /home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE/train.csv
+  验证集: /home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE/valid.csv
+  测试集: /home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE/test.csv
+
+划分参数:
+  随机种子: 42
+  训练集比例: 70%
+  验证集比例: 15%
+  测试集比例: 15%

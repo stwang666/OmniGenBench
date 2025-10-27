@@ -1,0 +1,49 @@
+FOD_TE数据清洗和划分报告
+==================================================
+
+原始数据信息:
+  样本数: 64,243
+  特征数: 15
+  label列NA数: 48,544
+  Seq列NA数: 0
+  总NA数: 48,544
+
+数据清洗结果:
+  原始样本数: 64,243
+  清洗后样本数: 15,699
+  去除样本数: 48,544
+  保留比例: 24.44%
+
+清洗后标签分布:
+  0.0: 8,928 (56.87%)
+  1.0: 6,771 (43.13%)
+
+数据划分结果:
+  训练集: 10,989 样本 (70.0%)
+  验证集: 2,355 样本 (15.0%)
+  测试集: 2,355 样本 (15.0%)
+
+各数据集标签分布:
+  训练集:
+    0.0: 6,249 (56.87%)
+    1.0: 4,740 (43.13%)
+
+  验证集:
+    0.0: 1,339 (56.86%)
+    1.0: 1,016 (43.14%)
+
+  测试集:
+    0.0: 1,340 (56.90%)
+    1.0: 1,015 (43.10%)
+
+文件保存位置:
+  训练集: /home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE_remove_na/train.csv
+  验证集: /home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE_remove_na/valid.csv
+  测试集: /home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE_remove_na/test.csv
+
+划分参数:
+  随机种子: 42
+  训练集比例: 70%
+  验证集比例: 15%
+  测试集比例: 15%
+  分层抽样: 是

@@ -1,0 +1,47 @@
+A亚基因组数据划分报告 （全部9个tissue）
+merged_A_tissue_data_filtered.csv
+==================================================
+
+总样本数: 22716
+
+训练集:
+  样本数: 13629
+  比例: 60.0%
+  各组织类型标签数:
+    root: 3008
+    seedling: 2855
+    leaf: 2198
+    FMI: 3246
+    FOD: 3512
+    Prophase-I-pollen: 2253
+    Tricellular-pollen: 2972
+    flag: 2213
+    grain: 2986
+
+验证集:
+  样本数: 4038
+  比例: 17.8%
+  各组织类型标签数:
+    root: 881
+    seedling: 813
+    leaf: 656
+    FMI: 935
+    FOD: 1012
+    Prophase-I-pollen: 696
+    Tricellular-pollen: 903
+    flag: 669
+    grain: 915
+
+测试集:
+  样本数: 5049
+  比例: 22.2%
+  各组织类型标签数:
+    root: 1063
+    seedling: 1059
+    leaf: 859
+    FMI: 1186
+    FOD: 1333
+    Prophase-I-pollen: 796
+    Tricellular-pollen: 1124
+    flag: 853
+    grain: 1080

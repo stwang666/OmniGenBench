@@ -681,3 +681,5 @@ cython_debug/
 # Built Visual Studio Code Extensions
 *.vsix
 examples/dingling_te/*.cache.dill
+examples/dingling_te_newlabel_na_as_2/ogb_te_3cla*
+examples/dingling_te_newlabel/ogb_te_2class_*
