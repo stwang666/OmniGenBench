@@ -131,6 +131,29 @@ Similarly, the ``download_model`` function allows you to fetch a pre-trained mod
 
    print(f"Model '{model_id}' downloaded successfully to: {local_path}")
 
+
+*******************************
+Analyzing Dataset Similarity
+*******************************
+
+When preparing experimental splits it is often useful to quantify how many items in the validation and test sets are highly similar to the training data. OmniGenBench ships a lightweight helper around the `cd-hit-est-2d` executable so you can automate this check across multiple identity thresholds.
+
+.. note::
+   Make sure `CD-HIT <https://github.com/weizhongli/cdhit>`_ is installed and the ``cd-hit-est-2d`` binary is available on your ``PATH`` before running the command below.
+
+To generate similarity reports at 80%, 85%, 90%, and 95% identity:
+
+.. code-block:: bash
+
+   python -m omnigenbench.src.utility.cdhit_similarity \
+       --train path/to/train.fasta \
+       --validation path/to/val.fasta \
+       --test path/to/test.fasta \
+       --output-dir results/cdhit_similarity \
+       --summary-json results/cdhit_similarity/summary.json
+
+The utility produces, for each threshold, the raw ``cd-hit`` clustering outputs plus helper files listing which validation/test identifiers overlap with the training set and which remain unique. The optional ``--summary-json`` flag writes an aggregated report that you can load in downstream analytics pipelines.
+
 ***************
 What's Next?
 ***************
