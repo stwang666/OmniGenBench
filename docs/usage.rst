@@ -154,6 +154,25 @@ To generate similarity reports at 80%, 85%, 90%, and 95% identity:
 
 The utility produces, for each threshold, the raw ``cd-hit`` clustering outputs plus helper files listing which validation/test identifiers overlap with the training set and which remain unique. The optional ``--summary-json`` flag writes an aggregated report that you can load in downstream analytics pipelines.
 
+*******************************
+Resplitting with cd-hit Clusters
+*******************************
+
+If you need to rebuild the dataset splits so that highly similar sequences remain in the same partition, you can cluster all sequences jointly and then reassign clusters while keeping the original split ratios. This is particularly helpful for mitigating train/validation/test leakage while retaining the overall data balance.
+
+.. code-block:: bash
+
+   python -m omnigenbench.src.utility.cdhit_resplit \
+       --train path/to/train.fasta \
+       --validation path/to/val.fasta \
+       --test path/to/test.fasta \
+       --threshold 0.90 \
+       --output-dir results/cdhit_resplit \
+       --summary-json results/cdhit_resplit/summary.json \
+       --cluster-report results/cdhit_resplit/cluster_assignments.tsv
+
+The script runs ``cd-hit-est`` on the combined dataset, keeps each cluster intact, and redistributes clusters so that the final train/validation/test counts remain as close as possible to the originals. New FASTA files named ``*_resplit.fasta`` are written to the specified output directory, alongside optional JSON/TSV reports describing the reassignment.
+
 ***************
 What's Next?
 ***************
