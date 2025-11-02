@@ -16,12 +16,78 @@ import pandas as pd
 from omnigenbench import (
     ModelHub,
     OmniTokenizer,
+    OmniModelForMultiLabelSequenceClassification,
+    OmniPooling,
 )
 
-# 导入自定义的 Dataset 类
-import sys
-sys.path.append(os.path.dirname(__file__))
-from triclass_te import TriClassTEDataset
+
+# 定义自定义模型类（简化版，仅用于推理）
+class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenceClassification):
+    """3分类多标签TE序列分类模型 - 简化版用于推理"""
+    
+    def __init__(self, config_or_model, tokenizer, num_labels=9, num_classes=3, *args, **kwargs):
+        super().__init__(config_or_model, tokenizer, num_labels=num_labels * num_classes, *args, **kwargs)
+        self.metadata["model_name"] = self.__class__.__name__
+        self.num_labels = num_labels  # 9个组织
+        self.num_classes = num_classes  # 3个类别 (Low/Medium/High)
+        self.pooler = OmniPooling(self.config)
+        self.classifier = torch.nn.Linear(self.config.hidden_size, self.num_classes * self.num_labels)
+    
+    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+        """Forward pass with proper reshaping for multi-label multi-class"""
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **kwargs
+        )
+        
+        # Get the logits from classifier head
+        logits = outputs.logits if hasattr(outputs, 'logits') else outputs[0]
+        logits = self.classifier(self.pooler(input_ids, logits))
+        # Reshape logits from [batch, num_labels * num_classes] to [batch, num_labels, num_classes]
+        batch_size = logits.shape[0]
+        logits = logits.view(batch_size, self.num_labels, self.num_classes)
+        
+        return {
+            "loss": None,
+            "logits": logits,
+            "last_hidden_state": outputs.last_hidden_state if hasattr(outputs, 'last_hidden_state') else None,
+        }
+    
+    def inference(self, sequence_or_inputs, **kwargs):
+        """推理方法"""
+        raw_outputs = self._forward_from_raw_input(sequence_or_inputs, **kwargs)
+        
+        logits = raw_outputs["logits"]
+        last_hidden_state = raw_outputs["last_hidden_state"]
+        
+        # 应用softmax
+        probabilities = torch.softmax(logits, dim=-1)
+        
+        # 获取预测
+        predictions = torch.argmax(probabilities, dim=-1)
+        
+        # 获取置信度（每个标签的最大概率）
+        confidence, _ = torch.max(probabilities, dim=-1)
+        
+        if not isinstance(sequence_or_inputs, list):
+            outputs = {
+                "predictions": predictions[0],
+                "logits": logits[0],
+                "probabilities": probabilities[0],
+                "confidence": confidence[0],
+                "last_hidden_state": last_hidden_state[0] if last_hidden_state is not None else None,
+            }
+        else:
+            outputs = {
+                "predictions": predictions,
+                "logits": logits,
+                "probabilities": probabilities,
+                "confidence": confidence,
+                "last_hidden_state": last_hidden_state,
+            }
+        
+        return outputs
 
 
 class SequencePerturbationAnalyzer:
@@ -85,9 +151,12 @@ class SequencePerturbationAnalyzer:
     def get_prediction(self, sample_data):
         """获取模型预测"""
         with torch.no_grad():
-            outputs = self.model.inference(sample_data)
+            # 只传递序列
+            sequence = sample_data['sequence']
+            outputs = self.model.inference(sequence)
             predictions = outputs['predictions'].cpu().numpy()
             probabilities = outputs['probabilities'].cpu().numpy()
+                
         return predictions, probabilities
     
     def calculate_prediction_change_score(self, original_pred, perturbed_pred, 
@@ -301,16 +370,18 @@ class SequencePerturbationAnalyzer:
         
         # 3. Top K 重要位置详细信息
         ax3 = fig.add_subplot(gs[2, 0])
-        top_k_indices = np.argsort(importance_scores)[-show_top_k:][::-1]
+        # 确保 top_k 不超过序列长度
+        actual_top_k = min(show_top_k, len(sequence))
+        top_k_indices = np.argsort(importance_scores)[-actual_top_k:][::-1]
         top_k_scores = importance_scores[top_k_indices]
         top_k_nucs = [sequence[i] for i in top_k_indices]
         
-        bars = ax3.barh(range(show_top_k), top_k_scores, 
+        bars = ax3.barh(range(actual_top_k), top_k_scores, 
                        color=[nuc_color_map.get(n.upper(), '#CCCCCC') for n in top_k_nucs])
-        ax3.set_yticks(range(show_top_k))
+        ax3.set_yticks(range(actual_top_k))
         ax3.set_yticklabels([f"Pos {idx}: {nuc}" for idx, nuc in zip(top_k_indices, top_k_nucs)])
         ax3.set_xlabel('Importance Score', fontsize=12, fontweight='bold')
-        ax3.set_title(f'Top {show_top_k} Most Important Positions', fontsize=14, fontweight='bold')
+        ax3.set_title(f'Top {actual_top_k} Most Important Positions', fontsize=14, fontweight='bold')
         ax3.invert_yaxis()
         ax3.grid(axis='x', alpha=0.3)
         
@@ -440,21 +511,24 @@ def main():
     # 创建分析器
     analyzer = SequencePerturbationAnalyzer(model)
     
-    # 加载数据集
-    print("\n📊 Loading dataset...")
-    model_name_or_path = "yangheng/OmniGenome-52M"
-    tokenizer = OmniTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
-    
-    datasets = TriClassTEDataset.from_hub(
-        dataset_name_or_path=os.path.dirname(__file__),
-        tokenizer=tokenizer,
-        max_length=512,
-        force_padding=False
-    )
+    # 直接从CSV加载数据 (避免复杂的Dataset初始化)
+    print("\n📊 Loading dataset from CSV...")
+    import pandas as pd
+    data_file = os.path.join(os.path.dirname(__file__), 'train.csv')
+    df = pd.read_csv(data_file, nrows=10)  # 只加载前10行用于测试
     
     # 选择测试样本
-    num_samples = min(3, len(datasets['test'].examples))
-    test_samples = datasets['test'].examples[:num_samples]
+    num_samples = min(3, len(df))
+    test_samples = []
+    for idx in range(num_samples):
+        row = df.iloc[idx]
+        sample = {
+            'ID': row.get('ID', f'sample_{idx}'),
+            'sequence': row['seq'],  # 列名是 'seq' 而不是 'sequence'
+        }
+        test_samples.append(sample)
+    
+    print(f"✅ Loaded {len(test_samples)} test samples")
     
     # 创建保存目录
     save_dir = "perturbation_analysis_results"

@@ -21,8 +21,8 @@ from omnigenbench import (
     OmniPooling,
 )
 
-model_name_or_path = "yangheng/OmniGenome-52M"
-# model_name_or_path = "yangheng/OmniGenome-v1.5"
+#model_name_or_path = "yangheng/OmniGenome-52M"
+model_name_or_path = "yangheng/OmniGenome-v1.5"
 # model_name_or_path = "SpliceBERT-510nt"
 # model_name_or_path = "InstaDeepAI/nucleotide-transformer-v2-100m-multi-species"
 
@@ -202,6 +202,7 @@ model = OmniModelForBiClassTESequenceClassification(
 metric_functions = [
     ClassificationMetric(ignore_y=-100).accuracy_score,  # 准确率：正确预测的样本数 / 总样本数
     ClassificationMetric(ignore_y=-100, average='macro').f1_score,  # 宏平均F1：(TP) / (TP + 0.5*(FP+FN))，对所有类别取平均
+    ClassificationMetric(ignore_y=-100).classification_report,
 ]
 
 # Initialize trainer
@@ -229,17 +230,17 @@ metric_functions = [
 trainer = Trainer(
     model=model,
     epochs=15,  # 增加epochs，因为学习率降低需要更多时间
-    learning_rate=5e-5,  # 🔑🔑 大幅降低学习率！从1e-4→5e-6 (降低20倍)
-    batch_size=16,  # 每次训练的样本数量
+    learning_rate=2e-5,  # 🔑🔑 大幅降低学习率！从1e-4→5e-6 (降低20倍)
+    batch_size=8,  # 每次训练的样本数量
     train_dataset=datasets["train"],
     eval_dataset=datasets["valid"],
     test_dataset=datasets["test"],  # 仅用于训练后的最终测试，不影响训练过程
     compute_metrics=metric_functions,
-   # gradient_accumulation_steps=4,
+    gradient_accumulation_steps=4,
     device="cuda:0",
 )
 # trainer.save_model(path_to_save="ogb_te_2class_single_tissue_finetuned", dataset_class=BiClassTEDataset)
-metrics = trainer.train(path_to_save="ogb_te_2class_single_tissue_finetuned_all_fod_te_remove_na", dataset_class=BiClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_2class_single_tissue_finetuned_all_fod_te_remove_na_v1.5", dataset_class=BiClassTEDataset)
 print('📊 Final Metrics:', metrics)
 
 # === Model Inference ===

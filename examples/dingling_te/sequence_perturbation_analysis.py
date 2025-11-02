@@ -234,7 +234,8 @@ def perturbation_importance_analysis(model, sequence, sample_data,
         sequence: 输入序列
         sample_data: 原始样本数据（字典）
         num_perturbations: 每个位置的扰动次数
-        step_size: 采样步长（每隔多少个碱基进行一次扰动）
+        step_size: 采样步长（每隔多少个碱基进行一次扰动） 扰动后的结果会被填充到步长之间的所有位置：
+
         tissue_names: 组织名称列表
     
     Returns:
@@ -424,7 +425,7 @@ def main():
     )
     
     # 选择测试样本
-    test_samples = datasets['test'].examples[:3]  # 分析前3个测试样本
+    test_samples = datasets['valid'].examples[:3]  # 分析前3个测试样本
     
     tissue_names = [
         'root', 'seedling', 'leaf', 'FMI', 'FOD',

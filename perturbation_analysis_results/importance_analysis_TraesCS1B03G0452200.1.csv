@@ -1,0 +1,12 @@
+position,nucleotide,importance_score,root_importance,seedling_importance,leaf_importance,FMI_importance,FOD_importance,Prophase-I-pollen_importance,Tricellular-pollen_importance,flag_importance,grain_importance
+0,C,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+1,T,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+2,G,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+3,A,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+4,C,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+5,A,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+6,G,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+7,G,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+8,A,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+9,C,inf,0.0,0.4,0.0,0.0,0.4,0.8,0.0,1.0,0.8
+10,G,0.20453097873263887,0.0,0.0,0.4,0.0,0.0,0.0,0.8,0.2,0.0

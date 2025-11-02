@@ -1,0 +1,118 @@
+{
+  "validation": [
+    {
+      "threshold": 0.8,
+      "target_sequences_total": 1000,
+      "target_sequences_matched": 997,
+      "target_sequences_unmatched": 3,
+      "target_match_ratio": 0.997,
+      "clusters_with_train_overlap": 948,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/validation_vs_train_80",
+        "cluster_report": "cdhit_similarity/validation_vs_train_80.clstr",
+        "matched_ids": "cdhit_similarity/validation_vs_train_80_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/validation_vs_train_80_unique_ids.txt"
+      }
+    },
+    {
+      "threshold": 0.85,
+      "target_sequences_total": 1000,
+      "target_sequences_matched": 997,
+      "target_sequences_unmatched": 3,
+      "target_match_ratio": 0.997,
+      "clusters_with_train_overlap": 960,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/validation_vs_train_85",
+        "cluster_report": "cdhit_similarity/validation_vs_train_85.clstr",
+        "matched_ids": "cdhit_similarity/validation_vs_train_85_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/validation_vs_train_85_unique_ids.txt"
+      }
+    },
+    {
+      "threshold": 0.9,
+      "target_sequences_total": 1000,
+      "target_sequences_matched": 997,
+      "target_sequences_unmatched": 3,
+      "target_match_ratio": 0.997,
+      "clusters_with_train_overlap": 971,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/validation_vs_train_90",
+        "cluster_report": "cdhit_similarity/validation_vs_train_90.clstr",
+        "matched_ids": "cdhit_similarity/validation_vs_train_90_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/validation_vs_train_90_unique_ids.txt"
+      }
+    },
+    {
+      "threshold": 0.95,
+      "target_sequences_total": 1000,
+      "target_sequences_matched": 989,
+      "target_sequences_unmatched": 11,
+      "target_match_ratio": 0.989,
+      "clusters_with_train_overlap": 973,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/validation_vs_train_95",
+        "cluster_report": "cdhit_similarity/validation_vs_train_95.clstr",
+        "matched_ids": "cdhit_similarity/validation_vs_train_95_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/validation_vs_train_95_unique_ids.txt"
+      }
+    }
+  ],
+  "test": [
+    {
+      "threshold": 0.8,
+      "target_sequences_total": 654,
+      "target_sequences_matched": 297,
+      "target_sequences_unmatched": 357,
+      "target_match_ratio": 0.4541,
+      "clusters_with_train_overlap": 283,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/test_vs_train_80",
+        "cluster_report": "cdhit_similarity/test_vs_train_80.clstr",
+        "matched_ids": "cdhit_similarity/test_vs_train_80_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/test_vs_train_80_unique_ids.txt"
+      }
+    },
+    {
+      "threshold": 0.85,
+      "target_sequences_total": 654,
+      "target_sequences_matched": 267,
+      "target_sequences_unmatched": 387,
+      "target_match_ratio": 0.4083,
+      "clusters_with_train_overlap": 264,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/test_vs_train_85",
+        "cluster_report": "cdhit_similarity/test_vs_train_85.clstr",
+        "matched_ids": "cdhit_similarity/test_vs_train_85_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/test_vs_train_85_unique_ids.txt"
+      }
+    },
+    {
+      "threshold": 0.9,
+      "target_sequences_total": 654,
+      "target_sequences_matched": 203,
+      "target_sequences_unmatched": 451,
+      "target_match_ratio": 0.3104,
+      "clusters_with_train_overlap": 202,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/test_vs_train_90",
+        "cluster_report": "cdhit_similarity/test_vs_train_90.clstr",
+        "matched_ids": "cdhit_similarity/test_vs_train_90_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/test_vs_train_90_unique_ids.txt"
+      }
+    },
+    {
+      "threshold": 0.95,
+      "target_sequences_total": 654,
+      "target_sequences_matched": 99,
+      "target_sequences_unmatched": 555,
+      "target_match_ratio": 0.1514,
+      "clusters_with_train_overlap": 98,
+      "output_files": {
+        "cluster_fasta": "cdhit_similarity/test_vs_train_95",
+        "cluster_report": "cdhit_similarity/test_vs_train_95.clstr",
+        "matched_ids": "cdhit_similarity/test_vs_train_95_matched_ids.txt",
+        "unmatched_ids": "cdhit_similarity/test_vs_train_95_unique_ids.txt"
+      }
+    }
+  ]
+}
