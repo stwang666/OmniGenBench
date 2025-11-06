@@ -21,8 +21,9 @@ from omnigenbench import (
     OmniPooling,
 )
 
-model_name_or_path = "yangheng/OmniGenome-52M"
-#model_name_or_path = "yangheng/OmniGenome-v1.5" #和186M模型差不多，修改了一些东西
+# model_name_or_path = "yangheng/OmniGenome-52M"
+# model_name_or_path = "yangheng/OmniGenome-186M"
+model_name_or_path = "yangheng/OmniGenome-v1.5" #和186M模型差不多，修改了一些东西
 #model_name_or_path = "multimolecule/splicebert"
 # model_name_or_path = "InstaDeepAI/nucleotide-transformer-v2-100m-multi-species"
 
@@ -116,8 +117,10 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
         # 添加类别权重来处理数据不平衡问题
         # 类别0和1的权重为1.0，类别2(NA)的权重为0.5，降低NA类的影响
         # 🔧 FIX: 注册为buffer，这样会自动跟随模型移动到GPU，在forward中动态使用
-        self.register_buffer('class_weights', torch.tensor([1.0, 1.0, 0.2], dtype=torch.float32))
+        self.register_buffer('class_weights', torch.tensor([2.785, 2.965, 0.434], dtype=torch.float32))
         self.loss_fn = torch.nn.CrossEntropyLoss(weight=self.class_weights, ignore_index=-100, reduction="mean")
+        self.dropout = torch.nn.Dropout(0.3)  # 可以增大到0.4-0.5训练损失下降但验证精度低，可能是过拟合
+        # 正则化能减少模型对训练集的“记忆”，提升泛化能力
 
         # 🔑 NEW: Store dataset class reference for saving
         self.dataset_class = kwargs.pop('dataset_class', TriClassTEDataset)
@@ -132,7 +135,9 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
 
         # Get the logits from classifier head
         logits = outputs.logits if hasattr(outputs, 'logits') else outputs[0]
-        logits = self.classifier(self.pooler(input_ids, logits))
+        logits = self.pooler(input_ids, logits)
+        logits = self.dropout(logits)  # ← 在这里应用 dropout
+        logits = self.classifier(logits)
         # Reshape logits from [batch, num_labels * num_classes] to [batch, num_labels, num_classes]
         batch_size = logits.shape[0]
         logits = logits.view(batch_size, self.num_labels, self.num_classes)
@@ -237,7 +242,7 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
 # Load datasets
 print("📊 Loading datasets...")
 datasets = TriClassTEDataset.from_hub(
-    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel_na_as_2/preprocess_data_Tno0_02_revise_data_1.1_2/cdhit_resplit_data",  # 指定具体的数据目录
+    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel_na_as_2/preprocess_data_Tno0_02/original_data",  # 指定具体的数据目录
     tokenizer=tokenizer,
     max_length=512,
     force_padding=False
@@ -308,8 +313,11 @@ trainer = Trainer(
     compute_metrics=metric_functions,
     gradient_accumulation_steps=4,
     device=torch.device("cuda:0"),
-    #max_grad_norm=1.0,  # 添加梯度裁剪
-    # weight_decay=0.01,  # 添加权重衰减
+    max_grad_norm=1.0,  # 添加梯度裁剪
+    weight_decay=0.01,  # 添加权重衰减
+    early_stopping=True,
+    patience=3,  # 验证集指标3个epoch不提升就停止
+    monitor='valid_f1_score',  # 监控验证集F1分数
     # warmup_steps=100,  # 学习率预热
     # eval_steps=50,  # 更频繁的验证
     # save_strategy="steps",
@@ -320,7 +328,7 @@ trainer = Trainer(
     # save_total_limit=3,
 )
 # trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
-metrics = trainer.train(path_to_save="ogb_te_3class_finetuned_na_as_2_tno0_02_52M_1.1_2_cdhit_resplit_data", dataset_class=TriClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_3class_finetuned_na_as_2_tno0_02_v1.5", dataset_class=TriClassTEDataset)
 print('📊 Final Metrics:', metrics)
 
 # === Model Inference ===

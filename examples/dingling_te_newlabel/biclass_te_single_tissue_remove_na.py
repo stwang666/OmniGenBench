@@ -21,8 +21,8 @@ from omnigenbench import (
     OmniPooling,
 )
 
-#model_name_or_path = "yangheng/OmniGenome-52M"
-model_name_or_path = "yangheng/OmniGenome-v1.5"
+model_name_or_path = "yangheng/OmniGenome-52M"
+#model_name_or_path = "yangheng/OmniGenome-v1.5"
 # model_name_or_path = "SpliceBERT-510nt"
 # model_name_or_path = "InstaDeepAI/nucleotide-transformer-v2-100m-multi-species"
 
@@ -75,7 +75,10 @@ class OmniModelForBiClassTESequenceClassification(OmniModelForSequenceClassifica
         self.pooler = OmniPooling(self.config)
         self.classifier = torch.nn.Linear(self.config.hidden_size, self.num_labels)
         # 使用CrossEntropyLoss进行单标签分类
-        self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction="mean")
+        #self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction="mean")
+        
+
+
 
         # 🔑 NEW: Store dataset class reference for saving
         self.dataset_class = kwargs.pop('dataset_class', BiClassTEDataset)

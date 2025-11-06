@@ -237,7 +237,7 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
 # Load datasets
 print("📊 Loading datasets...")
 datasets = TriClassTEDataset.from_hub(
-    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel_na_as_2/preprocess_data_Tno0_01_revise_data_1.1_2",  # 指定具体的数据目录
+    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel_na_as_2/preprocess_data_Tno0_02/te_augmentation",  # 指定具体的数据目录
     tokenizer=tokenizer,
     max_length=512,
     force_padding=False
@@ -319,7 +319,7 @@ trainer = Trainer(
     # save_total_limit=3,
 )
 # trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
-metrics = trainer.train(path_to_save="ogb_te_3class_finetuned_na_as_2_tno0_01_52M_1.1_2", dataset_class=TriClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_3class_finetuned_na_as_2_tno0_01_52M_augmented_3", dataset_class=TriClassTEDataset)
 print('📊 Final Metrics:', metrics)
 
 # === Model Inference ===
