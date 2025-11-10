@@ -683,3 +683,5 @@ cython_debug/
 examples/dingling_te/*.cache.dill
 examples/dingling_te_newlabel_na_as_2/ogb_te_3cla*
 examples/dingling_te_newlabel/ogb_te_2class_*
+# Large CSV files
+examples/dingling_te/te_augmentation/remove_duplicated_data_from_train/train.csv
