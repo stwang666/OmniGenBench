@@ -4,7 +4,7 @@
 # github: https://github.com/yangheng95
 # huggingface: https://huggingface.co/yangheng
 # google scholar: https://scholar.google.com/citations?user=NPq5a_0AAAAJ&hl=en
-# Copyright (C) 2019-2024. All Rights Reserved.
+# Copyright (C) 2019-2025. All Rights Reserved.
 """
 RNA design model using masked language modeling and evolutionary algorithms.
 
@@ -23,6 +23,7 @@ import ViennaRNA
 from scipy.spatial.distance import hamming
 import warnings
 import os
+from tqdm import tqdm
 
 from ....src.misc.utils import fprint
 
@@ -48,6 +49,7 @@ class OmniModelForRNADesign(torch.nn.Module):
         model="yangheng/OmniGenome-186M",
         device=None,
         parallel=False,
+        output_format="RNA",
         *args,
         **kwargs,
     ):
@@ -58,12 +60,16 @@ class OmniModelForRNADesign(torch.nn.Module):
             model (str): Model name or path for the pre-trained MLM model
             device: Device to run the model on (default: None, auto-detect)
             parallel (bool): Whether to use parallel processing (default: False)
+            output_format (str): Output format, either "RNA" (uses U) or "DNA" (uses T) (default: "RNA")
             *args: Additional positional arguments
             **kwargs: Additional keyword arguments
         """
         super().__init__(*args, **kwargs)
         self.device = autocuda.auto_cuda() if device is None else device
         self.parallel = parallel
+        self.output_format = (
+            output_format.upper() if isinstance(output_format, str) else "RNA"
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(model)
         self.model = AutoModelForMaskedLM.from_pretrained(model, trust_remote_code=True)
         # prefer float16 on CUDA
@@ -125,6 +131,24 @@ class OmniModelForRNADesign(torch.nn.Module):
             warnings.warn(f"Failed to fold sequence {sequence}: {e}")
             return ("." * len(sequence), 0.0)
 
+    def _postprocess_sequence(self, sequence):
+        """
+        Post-process sequence based on output format (RNA uses U, DNA uses T).
+
+        Args:
+            sequence (str): DNA sequence with T bases
+
+        Returns:
+            str: Sequence with appropriate base (U for RNA, T for DNA)
+        """
+        # Convert to uppercase and filter to only valid DNA bases
+        cleaned = "".join(c.upper() for c in sequence if c.upper() in "ATGC")
+
+        # Convert T to U for RNA output format
+        if self.output_format == "RNA":
+            return cleaned.replace("T", "U")
+        return cleaned
+
     # --------------------------
     # Evolutionary operators
     # --------------------------
@@ -145,6 +169,8 @@ class OmniModelForRNADesign(torch.nn.Module):
         outputs = self._mlm_predict(mlm_inputs, structure)
         for i in range(outputs.size(0)):
             toks = self.tokenizer.convert_ids_to_tokens(outputs[i].tolist())
+            # Convert tokens to uppercase for consistency
+            toks = [tok.upper() if tok else "" for tok in toks]
             # reconstruct: only fill masked positions with predicted base if valid
             sentinel_input = mlm_inputs[i].replace(self.tokenizer.mask_token, "$")
             fixed = [
@@ -185,6 +211,8 @@ class OmniModelForRNADesign(torch.nn.Module):
         mut_population = []
         for i in range(outputs.size(0)):
             toks = self.tokenizer.convert_ids_to_tokens(outputs[i].tolist())
+            # Convert tokens to uppercase for consistency
+            toks = [tok.upper() if tok else "" for tok in toks]
             sentinel = masked_sequences[i].replace(self.tokenizer.mask_token, "$")
             fixed = [
                 (
@@ -367,30 +395,60 @@ class OmniModelForRNADesign(torch.nn.Module):
     ):
         """
         Design RNA sequences for a target structure using evolutionary algorithms.
+
+        Args:
+            structure (str): Target secondary structure in dot-bracket notation
+            mutation_ratio (float): Mutation rate for genetic algorithm (0.0-1.0)
+            num_population (int): Population size for each generation
+            num_generation (int): Maximum number of evolutionary generations
+
+        Returns:
+            list: List of designed RNA sequences that fold into the target structure.
+                  Returns all sequences with perfect match (score=0) if found,
+                  otherwise returns the best sequences from final population.
+
+        Example:
+            >>> model = OmniModelForRNADesign(model="yangheng/OmniGenome-186M")
+            >>> sequences = model.design(structure="(((...)))", num_population=100, num_generation=50)
+            >>> print(f"Designed {len(sequences)} sequences")
         """
         # init
         population = self._init_population(structure, num_population)
         population = self._mlm_mutate(population, structure, mutation_ratio)
         # evolve
-        for _ in range(num_generation):
-            next_generation = self._crossover(population)
-            next_generation = self._mlm_mutate(
-                next_generation, structure, mutation_ratio
-            )
-            next_generation = self._evaluate_structure_fitness(
-                next_generation, structure
-            )[:num_population]
-            # early stop
-            candidates = [
-                seq for seq, _bp, score, _mfe in next_generation if score == 0
-            ]
-            if candidates:
-                return candidates
-            population = [
-                (seq, bp_span) for seq, bp_span, _score, _mfe in next_generation
-            ]
-        # fallback: return the best sequence encountered in last population
-        return population[0][0]
+        with tqdm(
+            total=num_generation, desc="Designing RNA sequences", unit="gen"
+        ) as pbar:
+            for _ in range(num_generation):
+                next_generation = self._crossover(population)
+                next_generation = self._mlm_mutate(
+                    next_generation, structure, mutation_ratio
+                )
+                next_generation = self._evaluate_structure_fitness(
+                    next_generation, structure
+                )[:num_population]
+                # early stop: return all perfect matches if found
+                candidates = [
+                    seq for seq, _bp, score, _mfe in next_generation if score == 0
+                ]
+                if candidates:
+                    pbar.update(num_generation - pbar.n)  # Complete the progress bar
+                    pbar.set_description(f"✅ Found {len(candidates)} perfect matches")
+                    return [self._postprocess_sequence(seq) for seq in candidates]
+
+                # Update progress with best score info
+                best_score = next_generation[0][2] if next_generation else 1.0
+                pbar.set_postfix({"best_score": f"{best_score:.4f}"})
+                pbar.update(1)
+
+                population = [
+                    (seq, bp_span) for seq, bp_span, _score, _mfe in next_generation
+                ]
+        # fallback: return top sequences from final population (at least 1, up to 25)
+        return [
+            self._postprocess_sequence(seq)
+            for seq, _bp, _score, _mfe in next_generation[:25]
+        ]
 
 
 # Example usage

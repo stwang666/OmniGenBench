@@ -57,7 +57,7 @@ def bench_command(args: Optional[list] = None):
     # Initialize benchmark
     autobench = AutoBench(
         benchmark=parsed_args.benchmark,
-        model_name_or_path=model,
+        config_or_model=model,
         tokenizer=tokenizer,
         overwrite=parsed_args.overwrite,
         trainer=parsed_args.trainer,
@@ -106,8 +106,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Optional arguments
     parser.add_argument(
         "--overwrite",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Overwrite existing bench results, otherwise resume from benchmark checkpoint.",
     )
     parser.add_argument(
@@ -136,8 +135,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--lora",
-        default=False,
-        type=bool,
+        action="store_true",
         help="Use LoRA fine-tuning if this flag is set.",
     )
     return parser

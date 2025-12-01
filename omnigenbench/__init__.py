@@ -5,28 +5,76 @@
 # github: https://github.com/yangheng95
 # huggingface: https://huggingface.co/yangheng
 # google scholar: https://scholar.google.com/citations?user=NPq5a_0AAAAJ&hl=en
-# Copyright (C) 2019-2024. All Rights Reserved.
+# Copyright (C) 2019-2025. All Rights Reserved.
 
 """
-This __init__.py file exposes the Key API Entries of the library for easy access.
-Use dir(omnigenbench) to see all available APIs.
+OmniGenBench: Unified Framework for Genomic Foundation Model Development and Benchmarking
+============================================================================================
 
-Key API Entries:
-----------------
-- AutoBench: Automated benchmarking of genomic models
-- AutoTrain: Automated training of genomic models
-- BenchHub: Hub for accessing benchmarks
-- ModelHub: Hub for accessing pre-trained models
-- PipelineHub: Hub for accessing pipelines
-- Various model classes for different genomic tasks
-- Dataset classes for different data formats
-- Tokenizer classes for different sequence representations
-- Metric classes for evaluation
-- Trainer classes for model training
+A comprehensive toolkit for developing, evaluating, and deploying genomic foundation models
+across diverse biological sequence analysis tasks. Built on principled software architecture
+with four core abstract base classes (OmniModel, OmniDataset, OmniTokenizer, OmniMetric).
+
+Core API Components
+-------------------
+
+**High-Level Workflows:**
+    - AutoBench: Automated benchmarking on 80+ standardized genomic tasks
+    - AutoTrain: Distributed training and fine-tuning with multiple trainer backends
+    - ModelHub: Load 30+ pre-trained genomic foundation models from HuggingFace Hub
+    - PipelineHub: Access end-to-end inference pipelines for common genomic tasks
+    - BenchHub: Download and manage benchmark datasets (RGB, BEACON, PGB, GUE, GB)
+
+**Abstract Base Classes (Extend These):**
+    - OmniModel: Unified model interface with task-specific subclasses
+    - OmniDataset: Polymorphic data loading supporting 8+ file formats
+    - OmniTokenizer: Genomic sequence tokenization with k-mer, BPE, and single-nucleotide strategies
+    - OmniMetric: Evaluation metrics with scikit-learn integration
+
+**Task-Specific Models:**
+    - OmniModelForSequenceClassification: DNA/RNA sequence-level classification
+    - OmniModelForMultiLabelSequenceClassification: Multi-label classification (e.g., TF binding)
+    - OmniModelForTokenClassification: Per-nucleotide predictions (e.g., splice sites)
+    - OmniModelForSequenceRegression: Continuous predictions (e.g., expression levels)
+    - OmniModelForTokenRegression: Per-nucleotide continuous outputs
+    - OmniModelForRNADesign: Structure-to-sequence generation with genetic algorithms
+    - OmniModelForEmbedding: Representation learning and feature extraction
+
+**Task-Specific Datasets:**
+    - OmniDatasetForSequenceClassification: Sequence classification tasks
+    - OmniDatasetForMultiLabelClassification: Multi-label classification
+    - OmniDatasetForTokenClassification: Token-level classification
+    - OmniDatasetForSequenceRegression: Sequence regression
+    - OmniDatasetForTokenRegression: Token-level regression
+
+**Tokenizers:**
+    - OmniSingleNucleotideTokenizer: Character-level tokenization (~10 vocab)
+    - OmniKmersTokenizer: K-mer based tokenization (vocab 4^k)
+    - OmniBPETokenizer: Byte-Pair Encoding (learned subword units)
+
+**Metrics:**
+    - ClassificationMetric: Comprehensive classification evaluation (accuracy, F1, MCC, AUROC, AUPRC)
+    - RegressionMetric: Regression metrics (MSE, MAE, R², Pearson, Spearman)
+    - RankingMetric: Ranking and retrieval metrics (NDCG, MAP, Precision@K)
+
+**Trainers:**
+    - Trainer: Native PyTorch training loop with explicit control
+    - AccelerateTrainer: Distributed training via HuggingFace Accelerate
+    - HFTrainer: HuggingFace Trainer API integration
+
+**Utilities:**
+    - seed_everything: Set random seeds for reproducibility
+    - fprint: Framework-aware printing utility
+    - clean_temp_checkpoint: Cleanup temporary training files
+    - RNA2StructureCache: Persistent cache for ViennaRNA structure predictions
+
+Use `dir(omnigenbench)` to see all available APIs or visit the documentation at:
+https://omnigenbenchdoc.readthedocs.io/
+
 """
 
 __name__ = "omnigenbench"
-__version__ = "0.3.19alpha"
+__version__ = "0.4.8alpha"
 __author__ = "YANG, HENG"
 __email__ = "yangheng2021@gmail.com"
 __license__ = "Apache-2.0"
@@ -119,6 +167,7 @@ from .src.trainer.accelerate_trainer import AccelerateTrainer
 # Import hub utilities
 from .src.utility.hub_utils import (
     download_benchmark,
+    download_dataset,
     download_model,
     download_pipeline,
     query_models_info,
@@ -177,6 +226,7 @@ OmniGenomeModelForAugmentation = OmniModelForAugmentation
 # ------------------------------------------------------------------------------
 
 __all__ = [
+    "__version__",
     "load_benchmark_datasets",
     "OmniDataset",
     "OmniModel",
@@ -200,6 +250,7 @@ __all__ = [
     "AccelerateTrainer",
     "AutoBenchConfig",
     "download_benchmark",
+    "download_dataset",
     "download_model",
     "download_pipeline",
     "VoteEnsemblePredictor",
@@ -217,6 +268,7 @@ __all__ = [
     "OmniDatasetForSequenceRegression",
     "OmniDatasetForTokenClassification",
     "OmniDatasetForTokenRegression",
+    "OmniDatasetForMultiLabelClassification",
     "OmniTokenizer",
     "OmniKmersTokenizer",
     "OmniSingleNucleotideTokenizer",
@@ -240,6 +292,7 @@ __all__ = [
     "OmniModelForAugmentation",
     "OmniPooling",
     "download_benchmark",
+    "download_dataset",
     "download_model",
     "download_pipeline",
     "query_models_info",

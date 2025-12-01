@@ -5,7 +5,7 @@
 # github: https://github.com/yangheng95
 # huggingface: https://huggingface.co/yangheng
 # google scholar: https://scholar.google.com/citations?user=NPq5a_0AAAAJ&hl=en
-# Copyright (C) 2019-2024. All Rights Reserved.
+# Copyright (C) 2019-2025. All Rights Reserved.
 
 import os
 import time
@@ -34,34 +34,64 @@ from ... import __version__ as omnigenbench_version
 
 class AutoBench:
     """
-    This class provides a comprehensive framework for evaluating genomic models
-    across multiple benchmarks and tasks. It handles loading benchmarks, models,
-    tokenizers, and running evaluations with proper metric tracking and result
-    visualization.
+    Automated benchmarking framework for evaluating genomic foundation models across
+    standardized benchmark suites with reproducible protocols and statistical rigor.
 
-    AutoBench supports various evaluation scenarios including:
+    This class orchestrates the complete evaluation pipeline: benchmark dataset acquisition,
+    model loading, distributed inference, metric calculation, multi-seed averaging, and
+    results visualization. It implements best practices for genomic machine learning evaluation,
+    including proper cross-validation, ignored label handling, and task-specific metric selection.
 
-    - Single model evaluation across multiple benchmarks
-    - Multi-seed evaluation for robustness testing
-    - Different trainer backends (native, accelerate, huggingface)
-    - Automatic metric visualization and result tracking
+    **Design Philosophy**: AutoBench follows the "Convention over Configuration" principle,
+    providing sensible defaults while allowing full customization. By default, it uses the
+    ``native`` trainer for single-GPU evaluation (optimizing for control and debuggability),
+    while the CLI defaults to ``accelerate`` for distributed evaluation (optimizing for throughput).
+
+    **Benchmark Suites Supported**:
+
+    - **RGB**: RNA Genome Benchmarks (12 tasks) - RNA structure and function prediction
+    - **BEACON**: Broad Evaluation Across Computational geNOmics (13 tasks) - Multi-domain RNA
+    - **PGB**: Plant Genomics Benchmarks (7 categories) - Plant-specific sequence analysis
+    - **GUE**: Genomics Understanding Evaluation (36 datasets) - DNA general understanding
+    - **GB**: Genomics Benchmarks (9 datasets) - Classic DNA classification tasks
+
+    **Evaluation Protocol**:
+
+    1. **Dataset Loading**: Automatically downloads benchmark datasets from HuggingFace Hub
+       or local cache, validates data format, and applies task-specific preprocessing
+    2. **Model Initialization**: Loads pre-trained models with proper task-specific heads,
+       handling multi-label classification, regression, and token-level prediction
+    3. **Multi-Seed Evaluation**: Runs independent training/evaluation with different random
+       seeds (typically 3-5) to quantify variance and ensure statistical significance
+    4. **Metric Calculation**: Computes task-appropriate metrics (MCC, F1, AUPRC for
+       classification; MSE, Spearman for regression) with proper handling of ignored labels
+    5. **Result Aggregation**: Calculates mean ± standard deviation across seeds, generates
+       visualizations, and serializes results with MetricVisualizer
+
+    **Trainer Backend Selection**:
+
+    - ``native`` (Python API default): Pure PyTorch training loop for single-GPU evaluation,
+      providing explicit control over training dynamics and simplified debugging
+    - ``accelerate`` (CLI default): HuggingFace Accelerate for distributed evaluation across
+      multiple GPUs, enabling efficient parallel inference on large benchmarks
+    - ``hf_trainer``: HuggingFace Trainer API integration for users familiar with that ecosystem
 
     Attributes:
-        benchmark (str): The name or path of the benchmark to use.
-        model_name_or_path (str): The name or path of the model to evaluate.
-        tokenizer: The tokenizer to use for evaluation.
-        autocast (str): The autocast precision to use ('fp16', 'bf16', etc.).
-        overwrite (bool): Whether to overwrite existing evaluation results.
-        trainer (str): The trainer to use ('native', 'accelerate', 'hf_trainer').
-        mv_path (str): Path to the metric visualizer file.
-        mv (MetricVisualizer): The metric visualizer instance.
-        bench_metadata: Metadata about the benchmark configuration.
+        benchmark (str): Name or local path of the benchmark suite to evaluate on.
+        config_or_model (str): HuggingFace Hub identifier or local path to the model.
+        tokenizer: Tokenizer instance for sequence preprocessing. Auto-loaded if None.
+        autocast (str): Mixed precision mode ('fp16', 'bf16', 'fp32') for memory efficiency.
+        overwrite (bool): Whether to overwrite existing evaluation results or resume from cache.
+        trainer (str): Training backend ('native', 'accelerate', 'hf_trainer').
+        mv_path (str): Path to MetricVisualizer file for result serialization and visualization.
+        mv (MetricVisualizer): Active visualizer instance for tracking metrics across seeds.
+        bench_metadata: Benchmark configuration metadata loaded from benchmark's metadata.py.
     """
 
     def __init__(
         self,
         benchmark,
-        model_name_or_path,
+        config_or_model,
         tokenizer=None,
         **kwargs,
     ):
@@ -70,7 +100,9 @@ class AutoBench:
 
         Args:
             benchmark (str): The name or path of the benchmark to use.
-            model_name_or_path (str): The name or path of the model to evaluate.
+                            Can be a local path or a HuggingFace Hub benchmark name.
+                            For hub benchmarks, it will be automatically downloaded.
+            config_or_model (str): The name or path of the model to evaluate.
             tokenizer: The tokenizer to use. If None, it will be loaded from the model path.
             **kwargs: Additional keyword arguments.
                 - autocast (str): The autocast precision to use ('fp16', 'bf16', etc.).
@@ -79,45 +111,77 @@ class AutoBench:
                   Defaults to False.
                 - trainer (str): The trainer to use ('native', 'accelerate', 'hf_trainer').
                   Defaults to 'native'.
+                - cache_dir (str): Directory to cache downloaded benchmarks from hub.
+                  Defaults to './__OMNIGENBENCH_DATA__/benchmarks/'.
 
         Example:
-            >>> # Initialize with a benchmark and model
-            >>> bench = AutoBench("RGB", "model_name")
+            >>> # Initialize with a local benchmark path
+            >>> bench = AutoBench("/path/to/benchmark", "yangheng/OmniGenome-186M")
+
+            >>> # Initialize with a HuggingFace Hub benchmark name (auto-downloads)
+            >>> bench = AutoBench("RGB", "yangheng/OmniGenome-186M")
 
             >>> # Initialize with custom settings
             >>> bench = AutoBench("RGB", "model_name",
             ...                   autocast="bf16", trainer="accelerate")
         """
-        self.benchmark = benchmark.rstrip("/")
+        self.benchmark_name_or_path = (
+            benchmark.rstrip("/") if isinstance(benchmark, str) else benchmark
+        )
         self.autocast = kwargs.pop("autocast", "fp16")
         self.overwrite = kwargs.pop("overwrite", False)
         self.trainer = kwargs.pop("trainer", "native")
+        self.cache_dir = kwargs.pop("cache_dir", None)
 
-        self.model_name_or_path = model_name_or_path
-        self.tokenizer = tokenizer
-        if isinstance(self.model_name_or_path, str):
-            self.model_name_or_path = self.model_name_or_path.rstrip("/")
-            self.model_name = self.model_name_or_path.split("/")[-1]
+        # Check if benchmark is a hub name or local path
+        self.is_hub_benchmark = not os.path.exists(self.benchmark_name_or_path)
+
+        if self.is_hub_benchmark:
+            fprint(f"Detected HuggingFace Hub benchmark: {self.benchmark_name_or_path}")
+            fprint("Downloading benchmark from hub...")
+
+            # Download benchmark from hub using the unified download logic
+            self.benchmark = download_benchmark(
+                self.benchmark_name_or_path,
+                cache_dir=self.cache_dir,
+                use_hf_api=True,  # Use robust HF Hub API
+                force_download=self.overwrite,
+            )
+            self.benchmark = os.path.dirname(
+                findfile.find_file(self.benchmark, "metadata.py")
+            )
+            fprint(f"Benchmark downloaded to: {self.benchmark}")
         else:
-            self.model_name = self.model_name_or_path.__class__.__name__
+            self.benchmark = self.benchmark_name_or_path
+            fprint(f"Using local benchmark: {self.benchmark}")
+
+        self.config_or_model = config_or_model
+        self.tokenizer = tokenizer
+        if isinstance(config_or_model, str):
+            self.config_or_model = config_or_model.rstrip("/")
+            self.model_name = config_or_model.split("/")[-1]
+        else:
+            self.model_name = config_or_model.__class__.__name__
         if isinstance(tokenizer, str):
             self.tokenizer = tokenizer.rstrip("/")
+
         os.makedirs("./autobench_evaluations", exist_ok=True)
         time_str = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-        mv_name = f"{benchmark}-{self.model_name}"
+
+        # Use benchmark name for mv_name (not full path)
+        benchmark_name = os.path.basename(self.benchmark_name_or_path)
+        mv_name = f"{benchmark_name}-{self.model_name}"
         self.mv_path = f"./autobench_evaluations/{mv_name}-{time_str}.mv"
 
         mv_paths = findfile.find_files(
             "./autobench_evaluations",
-            and_key=[benchmark, self.model_name, ".mv"],
+            and_key=[benchmark_name, self.model_name, ".mv"],
         )
         if mv_paths and not self.overwrite:
             self.mv = MetricVisualizer.load(mv_paths[-1])
             self.mv.summary(round=4)
         else:
             self.mv = MetricVisualizer(self.mv_path)
-
-        self.benchmark = download_benchmark(self.benchmark)
 
         # Import benchmark list
         self.bench_metadata = load_module_from_path(
@@ -215,7 +279,7 @@ class AutoBench:
             # Init Tokenizer and Model
             if not self.tokenizer:
                 tokenizer = OmniTokenizer.from_pretrained(
-                    self.model_name_or_path,
+                    self.config_or_model,
                     trust_remote_code=bench_config.get("trust_remote_code", True),
                     **bench_config,
                 )
@@ -264,10 +328,10 @@ class AutoBench:
                     continue
 
                 seed_everything(seed)
-                if self.model_name_or_path:
+                if self.config_or_model:
                     model_cls = bench_config["model_cls"]
                     model = model_cls(
-                        self.model_name_or_path,
+                        self.config_or_model,
                         tokenizer=tokenizer,
                         label2id=bench_config.label2id,
                         num_labels=bench_config["num_labels"],
@@ -276,7 +340,7 @@ class AutoBench:
                     )
                 else:
                     raise ValueError(
-                        "model_name_or_path is not specified. Please provide a valid model name or path."
+                        "config_or_model is not specified. Please provide a valid model name or path."
                     )
 
                 fprint(f"\n{model}")
@@ -300,7 +364,7 @@ class AutoBench:
                     max_length = bench_config["max_length"]
 
                 train_set = dataset_cls(
-                    data_source=bench_config["train_file"],
+                    dataset_name_or_path=bench_config["train_file"],
                     tokenizer=tokenizer,
                     label2id=bench_config["label2id"],
                     max_length=max_length,
@@ -311,7 +375,7 @@ class AutoBench:
                     **_kwargs,
                 )
                 test_set = dataset_cls(
-                    data_source=bench_config["test_file"],
+                    dataset_name_or_path=bench_config["test_file"],
                     tokenizer=tokenizer,
                     label2id=bench_config["label2id"],
                     max_length=max_length,
@@ -321,17 +385,20 @@ class AutoBench:
                     drop_long_seq=bench_config.get("drop_long_seq", False),
                     **_kwargs,
                 )
-                valid_set = dataset_cls(
-                    data_source=bench_config["valid_file"],
-                    tokenizer=tokenizer,
-                    label2id=bench_config["label2id"],
-                    max_length=max_length,
-                    structure_in=bench_config.get("structure_in", False),
-                    max_examples=bench_config.get("max_examples", None),
-                    shuffle=False,
-                    drop_long_seq=bench_config.get("drop_long_seq", False),
-                    **_kwargs,
-                )
+                if "valid_file" in bench_config and bench_config["valid_file"]:
+                    valid_set = dataset_cls(
+                        dataset_name_or_path=bench_config["valid_file"],
+                        tokenizer=tokenizer,
+                        label2id=bench_config["label2id"],
+                        max_length=max_length,
+                        structure_in=bench_config.get("structure_in", False),
+                        max_examples=bench_config.get("max_examples", None),
+                        shuffle=False,
+                        drop_long_seq=bench_config.get("drop_long_seq", False),
+                        **_kwargs,
+                    )
+                else:
+                    valid_set = None
 
                 if self.trainer == "hf_trainer":
                     # Set up HuggingFace Trainer

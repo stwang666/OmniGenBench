@@ -9,6 +9,7 @@ ViennaRNA
 scikit-learn
 accelerate
 transformers>=4.46.0
+huggingface_hub>=0.20.0
 packaging
 peft
 dill
@@ -18,3 +19,4 @@ matplotlib
 gradio>=4.0.0
 biopython
 scipy
+tabulate

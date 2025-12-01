@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-# file: abstract_dataset.py
+# file: omni_dataset.py
 # time: 14:13 06/04/2024
 # author: YANG, HENG <hy345@exeter.ac.uk> (杨恒)
 # github: https://github.com/yangheng95
 # huggingface: https://huggingface.co/yangheng
 # google scholar: https://scholar.google.com/citations?user=NPq5a_0AAAAJ&hl=en
-# Copyright (C) 2019-2024. All Rights Reserved.
+# Copyright (C) 2019-2025. All Rights Reserved.
 
 """
 Specialized dataset classes for OmniGenome framework.
@@ -486,11 +486,12 @@ class OmniDatasetForMultiLabelClassification(OmniDataset):
             ...     label_indices=[0, 5, 10]
             ... )
         """
+        self.label_indices = label_indices
+
         super(OmniDatasetForMultiLabelClassification, self).__init__(
             dataset_name_or_path, tokenizer, max_length, **kwargs
         )
 
-        self.label_indices = label_indices
 
         self.metadata.update(
             {

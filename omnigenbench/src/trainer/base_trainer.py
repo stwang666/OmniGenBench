@@ -27,6 +27,103 @@ import torch
 from ..misc.utils import env_meta_info, fprint, seed_everything
 
 
+class MetricsDict(dict):
+    """
+    A custom dictionary class for storing training metrics with enhanced readability.
+
+    This class extends the built-in dict to provide a more readable string representation
+    of metrics, making it easier to understand training progress and results.
+    """
+
+    def __repr__(self) -> str:
+        """
+        Return a formatted, human-readable string representation of the metrics.
+
+        Returns:
+            str: A formatted string showing metrics organized by stage (train/valid/test)
+                 and best validation metrics.
+        """
+        if not self:
+            return "MetricsDict(empty)"
+
+        lines = ["=" * 80]
+        lines.append("Training Metrics Summary".center(80))
+        lines.append("=" * 80)
+
+        # Display best validation metrics first if available
+        if "best_valid" in self:
+            lines.append("\n[Best Validation Metrics]")
+            lines.append("-" * 80)
+            best_metrics = self["best_valid"]
+            if isinstance(best_metrics, dict):
+                for key, value in best_metrics.items():
+                    if isinstance(value, (int, float)):
+                        lines.append(f"  {key:.<40} {value:.6f}")
+                    elif isinstance(value, (list, tuple, np.ndarray)):
+                        if len(value) > 0 and isinstance(value[0], (int, float)):
+                            mean_val = np.mean(value)
+                            std_val = np.std(value)
+                            lines.append(f"  {key:.<40} {mean_val:.6f} ± {std_val:.6f}")
+                        else:
+                            lines.append(f"  {key:.<40} {value}")
+                    else:
+                        lines.append(f"  {key:.<40} {value}")
+
+        # Display metrics for each stage (train, valid, test)
+        for stage in ["train", "valid", "test"]:
+            if stage in self and self[stage]:
+                lines.append(f"\n[{stage.capitalize()} Metrics History]")
+                lines.append("-" * 80)
+
+                metrics_list = self[stage]
+                if isinstance(metrics_list, list) and len(metrics_list) > 0:
+                    # Show the number of epochs/evaluations
+                    lines.append(f"  Total evaluations: {len(metrics_list)}")
+
+                    # Show the latest metrics
+                    latest_metrics = metrics_list[-1]
+                    if isinstance(latest_metrics, dict):
+                        lines.append(f"  Latest (Epoch {len(metrics_list)}):")
+                        for key, value in latest_metrics.items():
+                            if isinstance(value, (int, float)):
+                                lines.append(f"    {key:.<38} {value:.6f}")
+                            elif isinstance(value, (list, tuple, np.ndarray)):
+                                if len(value) > 0 and isinstance(
+                                    value[0], (int, float)
+                                ):
+                                    mean_val = np.mean(value)
+                                    std_val = np.std(value)
+                                    lines.append(
+                                        f"    {key:.<38} {mean_val:.6f} ± {std_val:.6f}"
+                                    )
+                                else:
+                                    lines.append(f"    {key:.<38} {value}")
+                            else:
+                                lines.append(f"    {key:.<38} {value}")
+
+                    # Show trend if we have multiple epochs
+                    if len(metrics_list) > 1:
+                        lines.append(f"  First (Epoch 1):")
+                        first_metrics = metrics_list[0]
+                        if isinstance(first_metrics, dict):
+                            for key, value in first_metrics.items():
+                                if isinstance(value, (int, float)):
+                                    lines.append(f"    {key:.<38} {value:.6f}")
+                                elif isinstance(value, (list, tuple, np.ndarray)):
+                                    if len(value) > 0 and isinstance(
+                                        value[0], (int, float)
+                                    ):
+                                        mean_val = np.mean(value)
+                                        lines.append(f"    {key:.<38} {mean_val:.6f}")
+
+        lines.append("=" * 80)
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        """Return the same formatted representation as __repr__."""
+        return self.__repr__()
+
+
 def _infer_optimization_direction(
     metrics: Dict[str, Any], prev_metrics: List[Dict[str, Any]]
 ) -> str:
@@ -44,6 +141,13 @@ def _infer_optimization_direction(
     Returns:
         str: Either 'larger_is_better' or 'smaller_is_better'
     """
+    # Check if metrics is empty
+    if not metrics or len(metrics) == 0:
+        fprint(
+            "Warning: Cannot infer optimization direction from empty metrics. Defaulting to 'smaller_is_better'."
+        )
+        return "smaller_is_better"
+
     larger_is_better_metrics = [
         "accuracy",
         "f1",
@@ -90,6 +194,15 @@ def _infer_optimization_direction(
         )
 
         try:
+            # Check if prev_metrics have non-empty values
+            if (
+                not list(metrics.values())
+                or not list(prev_metrics[-1].values())
+                or not list(prev_metrics[0].values())
+            ):
+                fprint("Warning: Empty metric values found. Cannot infer from trends.")
+                return "smaller_is_better"
+
             # Get the first metric value for trend analysis
             first_metric_key = list(metrics.keys())[0]
             current_value = np.mean(
@@ -249,7 +362,7 @@ class BaseTrainer(ABC):
 
         # Initialize metadata and tracking
         self.metadata = env_meta_info()
-        self.metrics = {}
+        self.metrics = MetricsDict()
         self.predictions = {}
         self._optimization_direction = None
         self.trial_name = kwargs.get("trial_name", self.model.__class__.__name__)
@@ -356,6 +469,16 @@ class BaseTrainer(ABC):
             "test",
         ], "The metrics stage should be either 'valid' or 'test'."
 
+        # Check if metrics is empty
+        if not metrics or len(metrics) == 0:
+            fprint("Warning: Empty metrics dictionary received. Skipping comparison.")
+            # Still store the empty metrics for tracking
+            if stage not in self.metrics:
+                self.metrics[stage] = [metrics]
+            else:
+                self.metrics[stage].append(metrics)
+            return False
+
         # Store current metrics
         prev_metrics = self.metrics.get(stage, None)
         if stage not in self.metrics:
@@ -363,13 +486,15 @@ class BaseTrainer(ABC):
         else:
             self.metrics[stage].append(metrics)
 
-        # Initialize best metrics if not present
+        # Initialize best metrics if not present (only with non-empty metrics)
         if "best_valid" not in self.metrics:
             self.metrics["best_valid"] = metrics
             return True
 
-        if prev_metrics is None:
-            return False
+        # If we have best_valid but prev_metrics is None, this is the second call
+        # We should still compare against best_valid
+        if prev_metrics is None or len(prev_metrics) == 0:
+            prev_metrics = [self.metrics.get("best_valid", {})]
 
         # Determine optimization direction
         if self._optimization_direction is None:
@@ -379,11 +504,26 @@ class BaseTrainer(ABC):
 
         # Compare metrics based on optimization direction
         try:
+            # Check if metrics has values before accessing
+            if not list(metrics.values()):
+                fprint(
+                    "Warning: Metrics dictionary has no values. Skipping comparison."
+                )
+                return False
+
             current_value = np.mean(
                 list(metrics.values())[0]
                 if isinstance(list(metrics.values())[0], (list, tuple, np.ndarray))
                 else [list(metrics.values())[0]]
             )
+
+            # Check if best_valid has values
+            if not list(self.metrics["best_valid"].values()):
+                fprint(
+                    "Warning: Best metrics dictionary has no values. Skipping comparison."
+                )
+                return False
+
             best_value = np.mean(
                 list(self.metrics["best_valid"].values())[0]
                 if isinstance(

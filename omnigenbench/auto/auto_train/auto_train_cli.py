@@ -85,7 +85,7 @@ def train_command(args: Optional[list] = None):
     args.pop("tokenizer")
     autotrain = AutoTrain(
         dataset=args.pop("dataset"),
-        model_name_or_path=model,
+        config_or_model=model,
         tokenizer=tokenizer,
         overwrite=args.pop("overwrite", False),
         trainer=args.pop("trainer", "accelerate"),
@@ -130,8 +130,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Optional arguments
     parser.add_argument(
         "--overwrite",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Overwrite existing training results, otherwise resume from checkpoint.",
     )
     parser.add_argument(
