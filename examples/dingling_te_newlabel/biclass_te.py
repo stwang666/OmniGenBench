@@ -195,7 +195,8 @@ print("📊 Loading datasets...")
 datasets = BiClassTEDataset.from_hub(
     # "examples/dingling_te_newlabel",  # 指定具体的数据目录
     #"examples/dingling_te_newlabel/preprocess_data_Tmean_04/split_ab_train_d",  # 使用A+B训练，D划分的数据
-    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_04/split_a", #仅使用A划分的数据
+    # "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_04/split_a", #仅使用A划分的数据
+    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel/new_data",
     tokenizer=tokenizer,
     max_length=512,
     force_padding=False
@@ -267,7 +268,7 @@ trainer = Trainer(
     device="cuda:0",
 )
 # trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=BiClassTEDataset)
-metrics = trainer.train(path_to_save="ogb_te_2class_finetuned_a", dataset_class=BiClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_2class_finetuned_new_data", dataset_class=BiClassTEDataset)
 print('📊 Final Metrics:', metrics)
 
 # === Model Inference ===

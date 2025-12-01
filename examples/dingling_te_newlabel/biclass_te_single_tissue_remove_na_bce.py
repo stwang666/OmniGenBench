@@ -144,7 +144,7 @@ model = OmniModelForBiClassTESequenceClassification(
 # 3. Prepare your dataset
 # Format: [{"sequence": "AUGC...", "label": 1}, ...]
 datasets = BiClassTEDataset.from_hub(
-    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel/preprocess_data_Tmean_02/FOD_TE_remove_na",
+    "/home/sw1136/OmniGenBench/examples/dingling_te_newlabel/new_data",
     tokenizer=tokenizer,
     max_length=512
     #balanced_sampling=True  # Oversample minority class
@@ -174,5 +174,5 @@ trainer = Trainer(
   gradient_accumulation_steps=4,
 )
 # metrics = trainer.train()
-metrics = trainer.train(path_to_save="ogb_te_2class_single_tissue_finetuned_all_fod_te_remove_na_bcewithlogitsloss_52M", dataset_class=BiClassTEDataset)
+metrics = trainer.train(path_to_save="ogb_te_2class_single_tissue_finetuned_all_fod_te_remove_na_bcewithlogitsloss_52M_new_data", dataset_class=BiClassTEDataset)
 print('📊 Final Metrics:', metrics)
