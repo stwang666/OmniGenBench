@@ -87,7 +87,9 @@ class AccelerateTrainer(BaseTrainer):
 
         ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
         self.accelerator = Accelerator(
-            mixed_precision=mp_setting, kwargs_handlers=[ddp_kwargs]
+            mixed_precision=mp_setting,
+            kwargs_handlers=[ddp_kwargs],
+            gradient_accumulation_steps=getattr(self, "gradient_accumulation_steps", 1),
         )
 
         # Prepare components with accelerator
@@ -169,10 +171,60 @@ class AccelerateTrainer(BaseTrainer):
                 outputs = self.model(**batch)
                 loss = self._compute_loss(outputs)
 
-                # Backward pass and optimizer step within accumulate context
+                # === NaN/Inf debugging (print once when detected) ===
+                # We only print on main process to avoid log spam.
+                if self.accelerator.is_main_process:
+                    try:
+                        loss_val = loss.detach()
+                        if not torch.isfinite(loss_val):
+                            logits = outputs.get("logits", None)
+                            logits_bad = False
+                            if isinstance(logits, torch.Tensor):
+                                logits_bad = not torch.isfinite(logits.detach()).all().item()
+                            fprint(
+                                f"[NaN Debug] epoch={epoch+1} step={step+1} "
+                                f"loss={loss_val.item()} logits_has_nan_or_inf={logits_bad}"
+                            )
+
+                            # structure_bias_modules[0].spatial_bias min/max (if present)
+                            unwrapped = self.accelerator.unwrap_model(self.model)
+                            pb = getattr(unwrapped, "patched_backbone", None)
+                            sbm = getattr(pb, "structure_bias_modules", None) if pb is not None else None
+                            if sbm is not None and len(sbm) > 0 and hasattr(sbm[0], "spatial_bias"):
+                                spatial_bias = sbm[0].spatial_bias.detach()
+                                fprint(
+                                    f"[NaN Debug] spatial_bias[0] min={spatial_bias.min().item():.6g} "
+                                    f"max={spatial_bias.max().item():.6g}"
+                                )
+
+                            # Also print labels range to catch invalid labels
+                            if isinstance(batch, dict) and "labels" in batch and isinstance(batch["labels"], torch.Tensor):
+                                lbl = batch["labels"].detach()
+                                fprint(
+                                    f"[NaN Debug] labels: min={lbl.min().item()} max={lbl.max().item()} "
+                                    f"num_ignore={(lbl == -100).sum().item()}"
+                                )
+                    except Exception as e:
+                        fprint(f"[NaN Debug] failed to collect debug info: {e}")
+
+                # Backward pass
                 self.accelerator.backward(loss)
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+
+                # Only step optimizer when sync_gradients=True (end of accumulation)
+                if self.accelerator.sync_gradients:
+                    max_grad_norm = getattr(self, "max_grad_norm", None)
+                    if max_grad_norm is not None and max_grad_norm > 0:
+                        # clip_grad_norm_ returns total norm before clipping
+                        total_norm = self.accelerator.clip_grad_norm_(
+                            self.model.parameters(), max_grad_norm
+                        )
+                        if self.accelerator.is_main_process:
+                            try:
+                                fprint(f"[GradNorm] epoch={epoch+1} step={step+1} total_norm={float(total_norm):.6g}")
+                            except Exception:
+                                pass
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
 
             train_loss.append(loss.item())
             train_it.set_description(

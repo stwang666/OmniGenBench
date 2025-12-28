@@ -332,12 +332,23 @@ def main():
     print("Translation Efficiency Prediction with BPP Features")
     print("=" * 80)
     
+    # AVAILABLE_GFMS = [
+# 'yangheng/OmniGenome-52M',
+# 'yangheng/OmniGenome-186M',
+# 'yangheng/OmniGenome-v1.5',
+# 'zhihan1996/DNABERT-2-117M',
+# 'LongSafari/hyenadna-large-1m-seqlen-hf',
+# 'InstaDeepAI/nucleotide-transformer-v2-100m-multi-species',
+# 'kuleshov-group/caduceus-ph_seqlen-131k_d_model-256_n_layer-16',
+# 'multimolecule/rnafm', 
+# ]
     # Configuration
-    config_or_model = "yangheng/PlantRNA-FM"
+    # config_or_model = "yangheng/PlantRNA-FM"
+    config_or_model = "yangheng/OmniGenome-186M"
     dataset_name = "translation_efficiency_prediction"
     max_length = 512
     batch_size = 4
-    epochs = 10
+    epochs = 2
     learning_rate = 2e-5
     
     print(f"\n📋 Configuration:")
@@ -360,7 +371,8 @@ def main():
     
     # Try to load from local directory
     datasets = TEDatasetWithBPP.from_hub(
-        dataset_name_or_path='./',
+        # dataset_name_or_path='./',
+        dataset_name_or_path='translation_efficiency_prediction', #test dataset
         tokenizer=tokenizer,
         max_length=max_length,
         label2id=label2id,
@@ -393,7 +405,8 @@ def main():
         train_dataset=datasets["train"],
         valid_dataset=datasets['valid'],
         test_dataset=datasets['test'],
-        metric_functions=metric_functions,
+        # metric_functions=metric_functions,
+        compute_metrics=metric_functions, # 改成 compute_metrics
         model_save_path="te_bpp_finetuned",
         batch_size=batch_size,
         epochs=epochs,

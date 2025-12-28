@@ -24,24 +24,17 @@ Key Features:
     - Multi-scale CNN for BPP matrix processing
     - Attention-based feature fusion
     - Compatible with all OmniGenBench foundation models
+    - Multi-model testing support
 
-Example:
-    >>> from te_bpp_model import TEModelWithBPP, TEDatasetWithBPP, train_te_model
-    >>> 
-    >>> # Quick training
-    >>> results = train_te_model(
-    ...     model_name="yangheng/PlantRNA-FM",
-    ...     train_file="train.json",
-    ...     valid_file="valid.json",
-    ...     test_file="test.json",
-    ...     batch_size=8,
-    ...     epochs=20
-    ... )
-    >>> 
-    >>> # Custom usage
-    >>> model = TEModelWithBPP("yangheng/PlantRNA-FM", tokenizer, num_labels=2)
-    >>> trainer = AccelerateTrainer(model=model, train_dataset=train_ds, ...)
-    >>> trainer.train()
+Usage:
+    # Train with default model
+    python te_bpp_model.py
+    
+    # Test all available models
+    python te_bpp_model.py --test-all-models
+    
+    # Train with specific model
+    python te_bpp_model.py --model yangheng/OmniGenome-52M
 
 Author: YANG, HENG (杨恒)
 Contact: hy345@exeter.ac.uk
@@ -50,8 +43,25 @@ Homepage: https://yangheng95.github.io
 
 import os
 import json
+import argparse
 import warnings
+import traceback
 from typing import Dict, List, Optional, Union, Tuple
+
+# ============================================================================
+# Available Models for Testing
+# ============================================================================
+
+AVAILABLE_GFMS = [
+    'yangheng/OmniGenome-52M',
+    # 'yangheng/OmniGenome-186M',
+    # 'yangheng/OmniGenome-v1.5',
+    # 'zhihan1996/DNABERT-2-117M',
+    # 'LongSafari/hyenadna-large-1m-seqlen-hf',
+    # 'InstaDeepAI/nucleotide-transformer-v2-100m-multi-species',
+    # 'kuleshov-group/caduceus-ph_seqlen-131k_d_model-256_n_layer-16',
+    # 'multimolecule/rnafm',
+]
 
 import torch
 import torch.nn as nn
@@ -824,53 +834,264 @@ def train_te_model(
 
 
 # ============================================================================
-# Part 4: Main Entry Point
+# Part 4: Multi-Model Testing Functions
+# ============================================================================
+
+def test_all_models(
+    models: List[str] = None,
+    use_demo: bool = True,
+    epochs: int = 5,
+    batch_size: int = 4
+) -> Dict[str, Dict]:
+    """
+    Test all available models with BPP features sequentially.
+    
+    Args:
+        models: List of model names to test. If None, uses AVAILABLE_GFMS
+        use_demo: Whether to use demo data for testing
+        epochs: Number of training epochs for each model
+        batch_size: Batch size for training
+        
+    Returns:
+        Dictionary mapping model names to their test results
+    """
+    if models is None:
+        models = AVAILABLE_GFMS
+    
+    print("\n" + "=" * 80)
+    print("🧪 MULTI-MODEL TESTING FOR TE PREDICTION WITH BPP FEATURES")
+    print("=" * 80)
+    print(f"\n📋 Models to test: {len(models)}")
+    for i, model in enumerate(models, 1):
+        print(f"   {i}. {model}")
+    
+    all_results = {}
+    
+    for i, model_name in enumerate(models, 1):
+        print(f"\n{'='*80}")
+        print(f"📍 Testing Model {i}/{len(models)}: {model_name}")
+        print(f"{'='*80}")
+        
+        model_short_name = model_name.split('/')[-1]
+        output_dir = f"te_bpp_{model_short_name}"
+        
+        try:
+            # Train model
+            results = train_te_model(
+                model_name=model_name,
+                use_demo=use_demo,
+                batch_size=batch_size,
+                epochs=epochs,
+                output_dir=output_dir
+            )
+            
+            all_results[model_name] = {
+                "status": "SUCCESS",
+                "metrics": results,
+                "output_dir": output_dir
+            }
+            print(f"\n✅ Model {model_name} completed successfully!")
+            
+        except Exception as e:
+            print(f"\n❌ Model {model_name} failed with error:")
+            print(f"   {str(e)}")
+            traceback.print_exc()
+            all_results[model_name] = {
+                "status": "FAILED",
+                "error": str(e)
+            }
+    
+    # Print summary
+    print_test_summary(all_results)
+    
+    return all_results
+
+
+def print_test_summary(results: Dict[str, Dict]):
+    """Print a summary of all model test results."""
+    print("\n" + "=" * 80)
+    print("📊 MULTI-MODEL TEST SUMMARY (BPP Features)")
+    print("=" * 80)
+    
+    successful = sum(1 for r in results.values() if r.get("status") == "SUCCESS")
+    failed = len(results) - successful
+    
+    print(f"\n✅ Successful: {successful}")
+    print(f"❌ Failed: {failed}")
+    print(f"📊 Total: {len(results)}")
+    
+    print(f"\n{'Model':<60} {'Status':<15}")
+    print("-" * 75)
+    
+    for model_name, result in results.items():
+        status = result.get("status", "UNKNOWN")
+        status_emoji = "✅" if status == "SUCCESS" else "❌"
+        print(f"{status_emoji} {model_name:<58} {status:<15}")
+        
+        # Print metrics for successful models
+        if status == "SUCCESS" and "metrics" in result:
+            metrics = result["metrics"]
+            if isinstance(metrics, dict):
+                for metric_name, value in metrics.items():
+                    if isinstance(value, (int, float)):
+                        print(f"      - {metric_name}: {value:.4f}")
+    
+    print("\n" + "=" * 80)
+
+
+# ============================================================================
+# Part 5: Main Entry Point
 # ============================================================================
 
 def main():
-    """Main entry point for the script."""
-    # Example 1: Train with demo data
-    print("\n[EXAMPLE 1] Training with demo data...")
-    results = train_te_model(
-        model_name="yangheng/PlantRNA-FM",
-        use_demo=True,
-        batch_size=4,
-        epochs=5,  # Use fewer epochs for demo
-        output_dir="te_bpp_demo_model"
+    """Main entry point with command line argument parsing."""
+    parser = argparse.ArgumentParser(
+        description="Translation Efficiency Prediction with BPP Features - Multi-Model Testing",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Train with default model (PlantRNA-FM) using demo data
+    python te_bpp_model.py
+    
+    # Test all available models
+    python te_bpp_model.py --test-all-models
+    
+    # Train with specific model
+    python te_bpp_model.py --model yangheng/OmniGenome-52M
+    
+    # Test all models with custom epochs
+    python te_bpp_model.py --test-all-models --epochs 10 --batch-size 8
+    
+    # Train with real data files
+    python te_bpp_model.py --train-file train.json --valid-file valid.json --test-file test.json
+        """
     )
     
-    print("\n[EXAMPLE 1] Results:")
+    parser.add_argument(
+        "--model", "-m",
+        type=str,
+        default="yangheng/PlantRNA-FM",
+        help="Model name or path (default: yangheng/PlantRNA-FM)"
+    )
+    parser.add_argument(
+        "--test-all-models", "-a",
+        action="store_true",
+        help="Test all models in AVAILABLE_GFMS list"
+    )
+    parser.add_argument(
+        "--epochs", "-e",
+        type=int,
+        default=5,
+        help="Number of training epochs (default: 5)"
+    )
+    parser.add_argument(
+        "--batch-size", "-b",
+        type=int,
+        default=4,
+        help="Training batch size (default: 4)"
+    )
+    parser.add_argument(
+        "--use-demo",
+        action="store_true",
+        default=True,
+        help="Use demo data for testing (default: True)"
+    )
+    parser.add_argument(
+        "--train-file",
+        type=str,
+        default=None,
+        help="Path to training data file"
+    )
+    parser.add_argument(
+        "--valid-file",
+        type=str,
+        default=None,
+        help="Path to validation data file"
+    )
+    parser.add_argument(
+        "--test-file",
+        type=str,
+        default=None,
+        help="Path to test data file"
+    )
+    parser.add_argument(
+        "--output-dir", "-o",
+        type=str,
+        default=None,
+        help="Output directory for trained model"
+    )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List all available models and exit"
+    )
+    
+    args = parser.parse_args()
+    
+    # List models and exit
+    if args.list_models:
+        print("\n📋 Available Models for Testing:")
+        print("-" * 50)
+        for i, model in enumerate(AVAILABLE_GFMS, 1):
+            print(f"   {i}. {model}")
+        print("\nTo enable more models, edit the AVAILABLE_GFMS list in te_bpp_model.py")
+        return
+    
+    print("\n" + "=" * 80)
+    print("🧬 Translation Efficiency Prediction with BPP Features")
+    print("=" * 80)
+    
+    if args.test_all_models:
+        # Test all available models
+        results = test_all_models(
+            models=AVAILABLE_GFMS,
+            use_demo=args.use_demo,
+            epochs=args.epochs,
+            batch_size=args.batch_size
+        )
+    else:
+        # Check if using real data or demo data
+        use_demo = args.use_demo
+        if args.train_file and args.valid_file and args.test_file:
+            use_demo = False
+        
+        # Train single model
+        model_short_name = args.model.split('/')[-1]
+        output_dir = args.output_dir or f"te_bpp_{model_short_name}"
+        
+    results = train_te_model(
+            model_name=args.model,
+            train_file=args.train_file,
+            valid_file=args.valid_file,
+            test_file=args.test_file,
+            use_demo=use_demo,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            output_dir=output_dir
+    )
+    
+        print("\n📊 Training Results:")
     for metric, value in results.items():
-        print(f"  {metric}: {value:.4f}")
+            if isinstance(value, (int, float)):
+                print(f"   - {metric}: {value:.4f}")
     
-    # Example 2: Load and use the trained model
-    print("\n\n[EXAMPLE 2] Using the trained model for inference...")
-    
+        # Test inference
+        print("\n🔮 Testing inference with trained model...")
     from omnigenbench import ModelHub
     
-    # Load the saved model
-    model = ModelHub.load("te_bpp_demo_model")
-    
-    # Make predictions
+        model = ModelHub.load(output_dir)
     test_sequences = [
         "AUGCAUGCAUGCAUGC" * 30,
         "AAAUUUGGGCCCAAAUUUGGGCCC" * 20,
-        "GCGCGCGCGCGCGCGC" * 30,
     ]
-    
-    print(f"  [INFO] Making predictions on {len(test_sequences)} sequences...")
     
     for i, seq in enumerate(test_sequences, 1):
         outputs = model.inference({"sequence": seq})
-        pred = outputs["predictions"][0]
-        conf = outputs["confidence"]
-        
-        print(f"\n  Sequence {i}:")
-        print(f"    - Sequence: {seq[:40]}...")
-        print(f"    - Prediction: {'High TE' if pred == 1 else 'Low TE'}")
-        print(f"    - Confidence: {conf:.4f}")
+            pred = outputs.get("predictions", [0])[0]
+            conf = outputs.get("confidence", 0.5)
+            print(f"   Sequence {i}: {'High TE' if pred == 1 else 'Low TE'} (confidence: {conf:.4f})")
     
-    print("\n[SUCCESS] All examples completed!\n")
+    print("\n🎉 All tasks completed!")
 
 
 if __name__ == "__main__":

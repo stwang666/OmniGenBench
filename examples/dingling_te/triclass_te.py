@@ -126,7 +126,7 @@ class OmniModelForTriClassTESequenceClassification(OmniModelForMultiLabelSequenc
         if labels is not None:
             # labels shape: [batch, num_labels]
             # Flatten for CrossEntropyLoss
-            logits_flat = logits.view(-1, self.num_classes)  # [batch * num_labels, num_classes]
+            logits_flat = logits.view(-1, self.num_classes)  # [batch * num_labels, num_classes]. 这里的num_classes是3，因为3个类别 相当于源代码的num_labels;num_labels是仅这里定义的，为num_tissues=9,因为9个tissue
             labels_flat = labels.view(-1)  # [batch * num_labels]
 
             loss = self.loss_fn(logits_flat, labels_flat)

@@ -689,3 +689,5 @@ examples/dingling_te/te_augmentation/remove_duplicated_data_from_train/train.csv
 examples/dingling_te_structure/ogb_te_2class_finetuned_*
 examples/dingling_te_structure/triclass/ogb_te_3class_finetuned_*
 examples/dingling_te_structure/preprocess_data_Tno0_02/*_TE.csv
+examples/dingling_te_structure_new20251205/ogb_te_*
+examples/dingling_te_structure_new20251205_new_encoder/ogb_te_**.safetensors
