@@ -14,7 +14,9 @@ from omnigenbench import (
 )
 import torch.nn as nn
 
-model_name_or_path = "yangheng/OmniGenome-52M"
+# model_name_or_path = "yangheng/OmniGenome-52M"
+# model_name_or_path = "yangheng/OmniGenome-186M"
+model_name_or_path = "/projects/u5cs/stwang/OmniGenBench/OmniGenome-v1.5"
 # model_name_or_path = "yangheng/OmniGenome-v1.5"
 # model_name_or_path = "InstaDeepAI/nucleotide-transformer-v2-100m-multi-species"
 # dataset_name = "translation_efficiency_prediction"
@@ -346,7 +348,7 @@ tokenizer = OmniTokenizer.from_pretrained(model_name_or_path)
 # 如果序列长度约512，结构信息长度也约512，建议设置 max_length=1024 或更大
 # 但要注意不能超过模型的最大位置嵌入限制（model.config.max_position_embeddings）
 datasets = OmniDatasetWithTissue.from_hub(
-    "/home/sw1136/OmniGenBench/examples/dingling_te_structure_new20251205/split_label_all_together_log10_biclass", # 指定具体的数据目录
+    "/projects/u5cs/stwang/OmniGenBench/examples/dingling_te_structure_new20251205/split_label_all_together_log10_biclass", # 指定具体的数据目录
     tokenizer=tokenizer,
     max_length=512,  # 增加 max_length 以容纳序列+结构信息（原512 + 结构信息512 ≈ 1024）
     label2id=label2id,
@@ -394,7 +396,7 @@ print("🎓 Starting training...")
 # trainer.save_model("ogb_te_finetuned")
 
 # # trainer.save_model(path_to_save="ogb_te_3class_finetuned", dataset_class=TriClassTEDataset)
-metrics = trainer.train(path_to_save="ogb_te_2class_finetuned_52M_seq_tissue_log10", dataset_class=OmniDatasetWithTissue)
+metrics = trainer.train(path_to_save="ogb_te_2class_finetuned_v1.5_seq_tissue_log10", dataset_class=OmniDatasetWithTissue)
 print('Final Metrics:', metrics)
 
 
